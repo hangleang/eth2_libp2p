@@ -51,7 +51,6 @@ pub enum Error {
 impl<Id: ReqId, P: Preset> SelfRateLimiter<Id, P> {
     /// Creates a new [`SelfRateLimiter`] based on configration values.
     pub fn new(config: OutboundRateLimiterConfig, log: Logger) -> Result<Self, &'static str> {
-        debug!(log, "Using self rate limiting params"; "config" => ?config);
         let limiter = RateLimiter::new_with_config(config.0)?;
 
         Ok(SelfRateLimiter {
@@ -185,6 +184,32 @@ impl<Id: ReqId, P: Preset> SelfRateLimiter<Id, P> {
             });
         failed_requests
     }
+    // NOTE: There can be entries that have been removed due to peer disconnections, we simply
+    // ignore these messages here.
+
+    /// Informs the limiter that a peer has disconnected. This removes any pending requests and
+    /// returns their IDs.
+    pub fn peer_disconnected(&mut self, peer_id: PeerId) -> Vec<(Id, Protocol)> {
+        // It's not ideal to iterate this map, but the key is (PeerId, Protocol) and this map
+        // should never really be large. So we iterate for simplicity
+        let mut failed_requests = Vec::new();
+        self.delayed_requests
+            .retain(|(map_peer_id, protocol), queue| {
+                if map_peer_id == &peer_id {
+                    // NOTE: Currently cannot remove entries from the DelayQueue, we will just let
+                    // them expire and ignore them.
+                    for message in queue {
+                        failed_requests.push((message.request_id, *protocol))
+                    }
+                    // Remove the entry
+                    false
+                } else {
+                    // keep the entry
+                    true
+                }
+            });
+        failed_requests
+    }
 
     pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<BehaviourAction<Id, P>> {
         // First check the requests that were self rate limited, since those might add events to
@@ -280,7 +305,7 @@ mod tests {
             // Check that requests in the queue are ordered in the sequence 3, 4, 5.
             let mut iter = queue.iter();
             for i in 3..=5 {
-                assert_eq!(iter.next().unwrap().request_id, RequestId::Application(i));
+                assert_eq!(iter.next().unwrap().request_id, RequestId::Application(i)); 
             }
 
             assert_eq!(limiter.ready_requests.len(), 1);
