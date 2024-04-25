@@ -22,6 +22,8 @@ pub fn subnet_predicate(subnets: Vec<Subnet>, log: &slog::Logger) -> impl Fn(&En
             Subnet::SyncCommittee(subnet_id) => sync_committee_bitfield
                 .and_then(|bitfield| bitfield.get(subnet_id as usize))
                 .unwrap_or_default(),
+            // TODO(das) discovery to be implemented at a later phase. Initially we just use a large peer count.
+            Subnet::DataColumn(_) => false,
         });
 
         if !predicate {

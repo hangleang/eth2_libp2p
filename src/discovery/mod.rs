@@ -502,6 +502,8 @@ impl Discovery {
                     .enr_insert(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice())
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
+            // TODO(das) discovery to be implemented at a later phase. Initially we just use a large peer count.
+            Subnet::DataColumn(_) => return Ok(()),
         }
 
         // replace the global version
@@ -825,6 +827,7 @@ impl Discovery {
                             let query_str = match query.subnet {
                                 Subnet::Attestation(_) => "attestation",
                                 Subnet::SyncCommittee(_) => "sync_committee",
+                                Subnet::DataColumn(_) => "data_column",
                             };
 
                             if let Some(v) = crate::common::metrics::get_int_counter(
