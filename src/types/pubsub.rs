@@ -2,7 +2,7 @@
 
 use crate::types::{ForkContext, GossipEncoding, GossipKind, GossipTopic};
 use crate::TopicHash;
-use eip_7594::{DataColumnSidecar, DataColumnSubnetId};
+use eip_7594::DataColumnSubnetId;
 use snap::raw::{decompress_len, Decoder, Encoder};
 use ssz::{SszReadDefault, SszWrite as _, WriteError};
 use std::boxed::Box;
@@ -25,6 +25,7 @@ use types::{
         },
         primitives::{ForkDigest, SubnetId},
     },
+    eip7594::DataColumnSidecar,
     preset::Preset,
     traits::SignedBeaconBlock as _,
 };
