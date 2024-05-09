@@ -1,4 +1,3 @@
-use eip_7594::DataColumnSubnetId;
 use serde::Serialize;
 use std::time::Instant;
 use types::phase0::primitives::SubnetId;
@@ -14,7 +13,7 @@ pub enum Subnet {
     /// Represents a gossipsub sync committee subnet and the metadata `syncnets` field.
     SyncCommittee(SubnetId),
     /// Represents a gossipsub data column subnet and the metadata `blbcolnets` field.
-    DataColumn(DataColumnSubnetId),
+    DataColumn(SubnetId),
 }
 
 /// A subnet to discover peers on along with the instant after which it's no longer useful.

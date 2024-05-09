@@ -120,7 +120,7 @@ pub enum GossipKind {
     /// Topic for publishing BlobSidecars.
     BlobSidecar(u64),
     /// Topic for publishing DataColumnSidecars.
-    DataColumnSidecar(DataColumnSubnetId),
+    DataColumnSidecar(SubnetId),
     /// Topic for publishing raw attestations on a particular subnet.
     #[strum(serialize = "beacon_attestation")]
     Attestation(SubnetId),

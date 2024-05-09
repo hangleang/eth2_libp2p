@@ -2,7 +2,6 @@
 
 use crate::types::{ForkContext, GossipEncoding, GossipKind, GossipTopic};
 use crate::TopicHash;
-use eip_7594::DataColumnSubnetId;
 use snap::raw::{decompress_len, Decoder, Encoder};
 use ssz::{SszReadDefault, SszWrite as _, WriteError};
 use std::boxed::Box;
@@ -17,6 +16,7 @@ use types::{
     capella::containers::{SignedBeaconBlock as CapellaBeaconBlock, SignedBlsToExecutionChange},
     combined::{LightClientFinalityUpdate, LightClientOptimisticUpdate, SignedBeaconBlock},
     deneb::containers::{BlobSidecar, SignedBeaconBlock as DenebBeaconBlock},
+    eip7594::DataColumnSidecar,
     nonstandard::Phase,
     phase0::{
         containers::{
@@ -25,7 +25,6 @@ use types::{
         },
         primitives::{ForkDigest, SubnetId},
     },
-    eip7594::DataColumnSidecar,
     preset::Preset,
     traits::SignedBeaconBlock as _,
 };
@@ -37,7 +36,7 @@ pub enum PubsubMessage<P: Preset> {
     /// Gossipsub message providing notification of a [`BlobSidecar`] along with the subnet id where it was received.
     BlobSidecar(Box<(SubnetId, Arc<BlobSidecar<P>>)>),
     /// Gossipsub message providing notification of a [`DataColumnSidecar`] along with the subnet id where it was received.
-    DataColumnSidecar(Box<(DataColumnSubnetId, Arc<DataColumnSidecar<P>>)>),
+    DataColumnSidecar(Box<(SubnetId, Arc<DataColumnSidecar<P>>)>),
     /// Gossipsub message providing notification of a Aggregate attestation and associated proof.
     AggregateAndProofAttestation(Box<SignedAggregateAndProof<P>>),
     /// Gossipsub message providing notification of a raw un-aggregated attestation with its shard id.
