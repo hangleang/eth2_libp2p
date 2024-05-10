@@ -24,7 +24,6 @@ use crate::{metrics, Enr, NetworkGlobals, PubsubMessage, TopicHash};
 use crate::{task_executor, Eth2Enr};
 use anyhow::{anyhow, Error, Result};
 use api_types::{PeerRequestId, Request, RequestId, Response};
-use eip_7594::DATA_COLUMN_SIDECAR_SUBNET_COUNT;
 use futures::stream::StreamExt;
 use gossipsub::{
     IdentTopic as Topic, MessageAcceptance, MessageAuthenticity, MessageId, PublishError,
@@ -48,6 +47,7 @@ use std::time::Duration;
 use types::{
     altair::consts::SyncCommitteeSubnetCount,
     config::Config as ChainConfig,
+    eip7594::DATA_COLUMN_SIDECAR_SUBNET_COUNT,
     nonstandard::Phase,
     phase0::{
         consts::AttestationSubnetCount,
@@ -241,7 +241,6 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             let max_topics = AttestationSubnetCount::USIZE
                 + SyncCommitteeSubnetCount::USIZE
                 + BlobSidecarSubnetCount::USIZE
-                // cia kazkaip skiriasi kodas
                 + DATA_COLUMN_SIDECAR_SUBNET_COUNT as usize
                 + BASE_CORE_TOPICS.len()
                 + ALTAIR_CORE_TOPICS.len()

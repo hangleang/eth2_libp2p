@@ -18,7 +18,6 @@ bytes = { workspace = true }
 delay_map = { workspace = true }
 dirs = { workspace = true }
 discv5 = { workspace = true }
-eip_7594 = {workspace = true}
 either = { workspace = true }
 enum-iterator = { workspace = true }
 fnv = { workspace = true }
