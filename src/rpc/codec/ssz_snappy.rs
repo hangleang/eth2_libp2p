@@ -15,7 +15,10 @@ use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_util::codec::{Decoder, Encoder};
-use types::combined::LightClientBootstrap;
+use types::combined::{
+    LightClientBootstrap, LightClientFinalityUpdate, LightClientOptimisticUpdate,
+};
+use types::eip7594::DataColumnSidecar;
 use types::{
     altair::containers::SignedBeaconBlock as AltairSignedBeaconBlock,
     bellatrix::containers::SignedBeaconBlock as BellatrixSignedBeaconBlock,
@@ -76,7 +79,11 @@ impl<P: Preset> Encoder<RPCCodedResponse<P>> for SSZSnappyInboundCodec<P> {
                 RPCResponse::BlocksByRoot(res) => res.to_ssz()?,
                 RPCResponse::BlobsByRange(res) => res.to_ssz()?,
                 RPCResponse::BlobsByRoot(res) => res.to_ssz()?,
+                RPCResponse::DataColumnsByRoot(res) => res.to_ssz()?,
+                RPCResponse::DataColumnsByRange(res) => res.to_ssz()?,
                 RPCResponse::LightClientBootstrap(res) => res.to_ssz()?,
+                RPCResponse::LightClientOptimisticUpdate(res) => res.to_ssz()?,
+                RPCResponse::LightClientFinalityUpdate(res) => res.to_ssz()?,
                 RPCResponse::Pong(res) => res.data.to_ssz()?,
                 RPCResponse::MetaData(res) =>
                 // Encode the correct version of the MetaData response based on the negotiated version.
@@ -225,6 +232,8 @@ impl<P: Preset> Encoder<OutboundRequest<P>> for SSZSnappyOutboundCodec<P> {
             },
             OutboundRequest::BlobsByRange(req) => req.to_ssz()?,
             OutboundRequest::BlobsByRoot(req) => req.blob_ids.to_ssz()?,
+            OutboundRequest::DataColumnsByRange(req) => req.to_ssz()?,
+            OutboundRequest::DataColumnsByRoot(req) => req.data_column_ids.to_ssz()?,
             OutboundRequest::Ping(req) => req.to_ssz()?,
             OutboundRequest::MetaData(_) => return Ok(()), // no metadata to encode
         };
@@ -389,30 +398,48 @@ fn context_bytes<P: Preset>(
     // Add the context bytes if required
     if protocol.has_context_bytes() {
         if let RPCCodedResponse::Success(rpc_variant) = resp {
-            if let RPCResponse::BlocksByRange(ref_box_block)
-            | RPCResponse::BlocksByRoot(ref_box_block) = rpc_variant
-            {
-                return match **ref_box_block {
-                    // NOTE: If you are adding another fork type here, be sure to modify the
-                    //       `fork_context.to_context_bytes()` function to support it as well!
-                    SignedBeaconBlock::Deneb { .. } => fork_context.to_context_bytes(Phase::Deneb),
-                    SignedBeaconBlock::Capella { .. } => {
-                        fork_context.to_context_bytes(Phase::Capella)
-                    }
-                    SignedBeaconBlock::Bellatrix { .. } => {
-                        // Merge context being `None` implies that "merge never happened".
-                        fork_context.to_context_bytes(Phase::Bellatrix)
-                    }
-                    SignedBeaconBlock::Altair { .. } => {
-                        // Altair context being `None` implies that "altair never happened".
-                        // This code should be unreachable if altair is disabled since only Version::V1 would be valid in that case.
-                        fork_context.to_context_bytes(Phase::Altair)
-                    }
-                    SignedBeaconBlock::Phase0 { .. } => Some(fork_context.genesis_context_bytes()),
-                };
-            }
-            if let RPCResponse::BlobsByRange(_) | RPCResponse::BlobsByRoot(_) = rpc_variant {
-                return fork_context.to_context_bytes(Phase::Deneb);
+            match rpc_variant {
+                RPCResponse::BlocksByRange(ref_box_block)
+                | RPCResponse::BlocksByRoot(ref_box_block) => {
+                    return match **ref_box_block {
+                        // NOTE: If you are adding another fork type here, be sure to modify the
+                        //       `fork_context.to_context_bytes()` function to support it as well!
+                        SignedBeaconBlock::Deneb { .. } => {
+                            fork_context.to_context_bytes(Phase::Deneb)
+                        }
+                        SignedBeaconBlock::Capella { .. } => {
+                            fork_context.to_context_bytes(Phase::Capella)
+                        }
+                        SignedBeaconBlock::Bellatrix { .. } => {
+                            fork_context.to_context_bytes(Phase::Bellatrix)
+                        }
+                        SignedBeaconBlock::Altair { .. } => {
+                            fork_context.to_context_bytes(Phase::Altair)
+                        }
+                        SignedBeaconBlock::Phase0 { .. } => {
+                            Some(fork_context.genesis_context_bytes())
+                        }
+                    };
+                }
+                RPCResponse::BlobsByRange(_)
+                | RPCResponse::BlobsByRoot(_)
+                | RPCResponse::DataColumnsByRoot(_)
+                | RPCResponse::DataColumnsByRange(_) => {
+                    return fork_context.to_context_bytes(Phase::Deneb);
+                }
+                RPCResponse::LightClientBootstrap(lc_bootstrap) => {
+                    return fork_context.to_context_bytes(lc_bootstrap.phase());
+                }
+                RPCResponse::LightClientOptimisticUpdate(lc_optimistic_update) => {
+                    return fork_context.to_context_bytes(lc_optimistic_update.phase());
+                }
+                RPCResponse::LightClientFinalityUpdate(lc_finality_update) => {
+                    return fork_context.to_context_bytes(lc_finality_update.phase());
+                }
+                // These will not pass the has_context_bytes() check
+                RPCResponse::Status(_) | RPCResponse::Pong(_) | RPCResponse::MetaData(_) => {
+                    return None;
+                }
             }
         }
     }
@@ -486,6 +513,14 @@ fn handle_rpc_request<P: Preset>(
                 blob_ids: ContiguousList::from_ssz_default(decoded_buffer)?,
             })))
         }
+        SupportedProtocol::DataColumnsByRangeV1 => Ok(Some(InboundRequest::DataColumnsByRange(
+            DataColumnsByRangeRequest::from_ssz_default(decoded_buffer)?,
+        ))),
+        SupportedProtocol::DataColumnsByRootV1 => Ok(Some(InboundRequest::DataColumnsByRoot(
+            DataColumnsByRootRequest {
+                data_column_ids: ContiguousList::from_ssz_default(decoded_buffer)?,
+            },
+        ))),
         SupportedProtocol::PingV1 => Ok(Some(InboundRequest::Ping(Ping {
             data: u64::from_ssz_default(decoded_buffer)?,
         }))),
@@ -494,6 +529,12 @@ fn handle_rpc_request<P: Preset>(
                 root: H256::from_ssz_default(decoded_buffer)?,
             }),
         )),
+        SupportedProtocol::LightClientOptimisticUpdateV1 => {
+            Ok(Some(InboundRequest::LightClientOptimisticUpdate))
+        }
+        SupportedProtocol::LightClientFinalityUpdateV1 => {
+            Ok(Some(InboundRequest::LightClientFinalityUpdate))
+        }
         // MetaData requests return early from InboundUpgrade and do not reach the decoder.
         // Handle this case just for completeness.
         SupportedProtocol::MetaDataV2 => {
@@ -572,6 +613,39 @@ fn handle_rpc_response<P: Preset>(
                 ),
             )),
         },
+        SupportedProtocol::DataColumnsByRangeV1 => match fork_name {
+            // TODO(das): update fork name
+            Some(Phase::Deneb) => Ok(Some(RPCResponse::DataColumnsByRange(Arc::new(
+                DataColumnSidecar::from_ssz_default(decoded_buffer)?,
+            )))),
+            Some(_) => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                "Invalid fork name for data columns by range".to_string(),
+            )),
+            None => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!(
+                    "No context bytes provided for {:?} response",
+                    versioned_protocol
+                ),
+            )),
+        },
+        SupportedProtocol::DataColumnsByRootV1 => match fork_name {
+            Some(Phase::Deneb) => Ok(Some(RPCResponse::DataColumnsByRoot(Arc::new(
+                DataColumnSidecar::from_ssz_default(decoded_buffer)?,
+            )))),
+            Some(_) => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                "Invalid fork name for data columns by root".to_string(),
+            )),
+            None => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!(
+                    "No context bytes provided for {:?} response",
+                    versioned_protocol
+                ),
+            )),
+        },
         SupportedProtocol::PingV1 => Ok(Some(RPCResponse::Pong(Ping {
             data: u64::from_ssz_default(decoded_buffer)?,
         }))),
@@ -596,6 +670,68 @@ fn handle_rpc_response<P: Preset>(
             Some(Phase::Deneb) => Ok(Some(RPCResponse::LightClientBootstrap(
                 SszReadDefault::from_ssz_default(decoded_buffer)
                     .map(LightClientBootstrap::Deneb)
+                    .map(Arc::new)?,
+            ))),
+            None => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!(
+                    "No context bytes provided for {:?} response",
+                    versioned_protocol
+                ),
+            )),
+        },
+        SupportedProtocol::LightClientOptimisticUpdateV1 => match fork_name {
+            Some(Phase::Phase0) => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!(
+                    "light_client_optimistic_update topic invalid for given fork {fork_name:?}",
+                ),
+            )),
+            Some(Phase::Altair | Phase::Bellatrix) => {
+                Ok(Some(RPCResponse::LightClientOptimisticUpdate(
+                    SszReadDefault::from_ssz_default(decoded_buffer)
+                        .map(LightClientOptimisticUpdate::Altair)
+                        .map(Arc::new)?,
+                )))
+            }
+            Some(Phase::Capella) => Ok(Some(RPCResponse::LightClientOptimisticUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientOptimisticUpdate::Capella)
+                    .map(Arc::new)?,
+            ))),
+            Some(Phase::Deneb) => Ok(Some(RPCResponse::LightClientOptimisticUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientOptimisticUpdate::Deneb)
+                    .map(Arc::new)?,
+            ))),
+            None => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!(
+                    "No context bytes provided for {:?} response",
+                    versioned_protocol
+                ),
+            )),
+        },
+        SupportedProtocol::LightClientFinalityUpdateV1 => match fork_name {
+            Some(Phase::Phase0) => Err(RPCError::ErrorResponse(
+                RPCResponseErrorCode::InvalidRequest,
+                format!("light_client_finality_update topic invalid for given fork {fork_name:?}",),
+            )),
+            Some(Phase::Altair | Phase::Bellatrix) => {
+                Ok(Some(RPCResponse::LightClientFinalityUpdate(
+                    SszReadDefault::from_ssz_default(decoded_buffer)
+                        .map(LightClientFinalityUpdate::Altair)
+                        .map(Arc::new)?,
+                )))
+            }
+            Some(Phase::Capella) => Ok(Some(RPCResponse::LightClientFinalityUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientFinalityUpdate::Capella)
+                    .map(Arc::new)?,
+            ))),
+            Some(Phase::Deneb) => Ok(Some(RPCResponse::LightClientFinalityUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientFinalityUpdate::Deneb)
                     .map(Arc::new)?,
             ))),
             None => Err(RPCError::ErrorResponse(
@@ -984,6 +1120,12 @@ mod tests {
             }
             OutboundRequest::BlobsByRoot(bbroot) => {
                 assert_eq!(decoded, InboundRequest::BlobsByRoot(bbroot))
+            }
+            OutboundRequest::DataColumnsByRange(value) => {
+                assert_eq!(decoded, InboundRequest::DataColumnsByRange(value))
+            }
+            OutboundRequest::DataColumnsByRoot(dcbroot) => {
+                assert_eq!(decoded, InboundRequest::DataColumnsByRoot(dcbroot))
             }
             OutboundRequest::Ping(ping) => {
                 assert_eq!(decoded, InboundRequest::Ping(ping))

@@ -2,11 +2,14 @@
 use crate::peer_manager::peerdb::PeerDB;
 use crate::rpc::{MetaData, MetaDataV2};
 use crate::types::{BackFillState, SyncState};
-use crate::Client;
 use crate::EnrExt;
+use crate::{Client, Eth2Enr};
 use crate::{Enr, GossipTopic, Multiaddr, PeerId};
+use ethereum_types::U256;
 use parking_lot::RwLock;
+use ssz::Uint256;
 use std::collections::HashSet;
+use types::{eip7594::ColumnIndex, phase0::primitives::Epoch};
 
 pub struct NetworkGlobals {
     /// The current local ENR.
@@ -114,6 +117,15 @@ impl NetworkGlobals {
         std::mem::replace(&mut *self.sync_state.write(), new_state)
     }
 
+    /// Compute custody data columns the node is assigned to custody.
+    pub fn custody_columns(&self, _epoch: Epoch) -> Result<Vec<ColumnIndex>, &'static str> {
+        let enr = self.local_enr();
+        let node_id = Uint256::from(U256::from(enr.node_id().raw()));
+        // TODO(das): cache this number at start-up to not make this fallible
+        let custody_subnet_count = enr.custody_subnet_count()?;
+        Ok(eip_7594::get_custody_columns(node_id, custody_subnet_count))
+    }
+
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
     pub fn new_test_globals(trusted_peers: Vec<PeerId>, log: &slog::Logger) -> NetworkGlobals {
         use crate::CombinedKeyExt;
@@ -131,5 +143,42 @@ impl NetworkGlobals {
             false,
             log,
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use slog::{o, Drain};
+    use typenum::Unsigned as _;
+    use types::eip7594::{NumberOfColumns, DATA_COLUMN_SIDECAR_SUBNET_COUNT};
+
+    use crate::NetworkGlobals;
+
+    pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
+        let decorator = slog_term::TermDecorator::new().build();
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+
+        if enabled {
+            slog::Logger::root(drain.filter_level(level).fuse(), o!())
+        } else {
+            slog::Logger::root(drain.filter(|_| false).fuse(), o!())
+        }
+    }
+
+    #[test]
+    fn test_custody_count_default() {
+        let log = build_log(slog::Level::Debug, false);
+        let default_custody_requirement_column_count =
+            NumberOfColumns::U64 / DATA_COLUMN_SIDECAR_SUBNET_COUNT;
+
+        let globals = NetworkGlobals::new_test_globals(vec![], &log);
+        let any_epoch = 0;
+        let columns = globals.custody_columns(any_epoch).unwrap();
+
+        assert_eq!(
+            columns.len(),
+            default_custody_requirement_column_count as usize
+        );
     }
 }

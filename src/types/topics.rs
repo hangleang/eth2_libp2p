@@ -281,12 +281,12 @@ impl std::fmt::Display for GossipTopic {
             GossipKind::BlobSidecar(blob_index) => {
                 format!("{}{}", BLOB_SIDECAR_PREFIX, blob_index)
             }
-            GossipKind::BlsToExecutionChange => BLS_TO_EXECUTION_CHANGE_TOPIC.into(),
-            GossipKind::LightClientFinalityUpdate => LIGHT_CLIENT_FINALITY_UPDATE.into(),
-            GossipKind::LightClientOptimisticUpdate => LIGHT_CLIENT_OPTIMISTIC_UPDATE.into(),
             GossipKind::DataColumnSidecar(index) => {
                 format!("{}{}", DATA_COLUMN_SIDECAR_PREFIX, index)
             }
+            GossipKind::BlsToExecutionChange => BLS_TO_EXECUTION_CHANGE_TOPIC.into(),
+            GossipKind::LightClientFinalityUpdate => LIGHT_CLIENT_FINALITY_UPDATE.into(),
+            GossipKind::LightClientOptimisticUpdate => LIGHT_CLIENT_OPTIMISTIC_UPDATE.into(),
         };
         write!(
             f,
@@ -327,9 +327,7 @@ fn subnet_topic_index(topic: &str) -> Option<GossipKind> {
     } else if let Some(index) = topic.strip_prefix(BLOB_SIDECAR_PREFIX) {
         return Some(GossipKind::BlobSidecar(index.parse::<u64>().ok()?));
     } else if let Some(index) = topic.strip_prefix(DATA_COLUMN_SIDECAR_PREFIX) {
-        return Some(GossipKind::DataColumnSidecar(
-            index.parse::<u64>().ok()?.try_into().unwrap(),
-        ));
+        return Some(GossipKind::DataColumnSidecar(index.parse::<u64>().ok()?));
     }
     None
 }

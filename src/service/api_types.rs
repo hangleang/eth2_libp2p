@@ -2,12 +2,18 @@ use std::sync::Arc;
 
 use libp2p::swarm::ConnectionId;
 use types::{
-    combined::{LightClientBootstrap, SignedBeaconBlock},
+    combined::{
+        LightClientBootstrap, LightClientFinalityUpdate, LightClientOptimisticUpdate,
+        SignedBeaconBlock,
+    },
     deneb::containers::BlobSidecar,
+    eip7594::DataColumnSidecar,
     preset::Preset,
 };
 
-use crate::rpc::methods::{BlobsByRangeRequest, BlobsByRootRequest};
+use crate::rpc::methods::{
+    BlobsByRangeRequest, BlobsByRootRequest, DataColumnsByRangeRequest, DataColumnsByRootRequest,
+};
 use crate::rpc::{
     methods::{
         BlocksByRangeRequest, BlocksByRootRequest, LightClientBootstrapRequest,
@@ -44,8 +50,16 @@ pub enum Request {
     BlocksByRoot(BlocksByRootRequest),
     // light client bootstrap request
     LightClientBootstrap(LightClientBootstrapRequest),
+    // light client optimistic update request
+    LightClientOptimisticUpdate,
+    // light client finality update request
+    LightClientFinalityUpdate,
     /// A request blobs root request.
     BlobsByRoot(BlobsByRootRequest),
+    /// A request data columns root request.
+    DataColumnsByRoot(DataColumnsByRootRequest),
+    /// A request data columns by range request.
+    DataColumnsByRange(DataColumnsByRangeRequest),
 }
 
 impl<P: Preset> std::convert::From<Request> for OutboundRequest<P> {
@@ -68,11 +82,15 @@ impl<P: Preset> std::convert::From<Request> for OutboundRequest<P> {
                     }),
                 ),
             },
-            Request::LightClientBootstrap(_) => {
+            Request::LightClientBootstrap(_)
+            | Request::LightClientOptimisticUpdate
+            | Request::LightClientFinalityUpdate => {
                 unreachable!("Grandine never makes an outbound light client request")
             }
             Request::BlobsByRange(r) => OutboundRequest::BlobsByRange(r),
             Request::BlobsByRoot(r) => OutboundRequest::BlobsByRoot(r),
+            Request::DataColumnsByRange(r) => OutboundRequest::DataColumnsByRange(r),
+            Request::DataColumnsByRoot(r) => OutboundRequest::DataColumnsByRoot(r),
             Request::Status(s) => OutboundRequest::Status(s),
         }
     }
@@ -92,12 +110,20 @@ pub enum Response<P: Preset> {
     BlocksByRange(Option<Arc<SignedBeaconBlock<P>>>),
     /// A response to a get BLOBS_BY_RANGE request. A None response signals the end of the batch.
     BlobsByRange(Option<Arc<BlobSidecar<P>>>),
+    /// A response to a get DATA_COLUMN_SIDECARS_BY_Range request.
+    DataColumnsByRange(Option<Arc<DataColumnSidecar<P>>>),
     /// A response to a get BLOCKS_BY_ROOT request.
     BlocksByRoot(Option<Arc<SignedBeaconBlock<P>>>),
     /// A response to a get BLOBS_BY_ROOT request.
     BlobsByRoot(Option<Arc<BlobSidecar<P>>>),
+    /// A response to a get DATA_COLUMN_SIDECARS_BY_ROOT request.
+    DataColumnsByRoot(Option<Arc<DataColumnSidecar<P>>>),
     /// A response to a LightClientUpdate request.
     LightClientBootstrap(Arc<LightClientBootstrap<P>>),
+    /// A response to a LightClientOptimisticUpdate request.
+    LightClientOptimisticUpdate(Arc<LightClientOptimisticUpdate<P>>),
+    /// A response to a LightClientFinalityUpdate request.
+    LightClientFinalityUpdate(Arc<LightClientFinalityUpdate<P>>),
 }
 
 impl<P: Preset> std::convert::From<Response<P>> for RPCCodedResponse<P> {
@@ -119,9 +145,25 @@ impl<P: Preset> std::convert::From<Response<P>> for RPCCodedResponse<P> {
                 Some(b) => RPCCodedResponse::Success(RPCResponse::BlobsByRange(b)),
                 None => RPCCodedResponse::StreamTermination(ResponseTermination::BlobsByRange),
             },
+            Response::DataColumnsByRoot(r) => match r {
+                Some(d) => RPCCodedResponse::Success(RPCResponse::DataColumnsByRoot(d)),
+                None => RPCCodedResponse::StreamTermination(ResponseTermination::DataColumnsByRoot),
+            },
+            Response::DataColumnsByRange(r) => match r {
+                Some(d) => RPCCodedResponse::Success(RPCResponse::DataColumnsByRange(d)),
+                None => {
+                    RPCCodedResponse::StreamTermination(ResponseTermination::DataColumnsByRange)
+                }
+            },
             Response::Status(s) => RPCCodedResponse::Success(RPCResponse::Status(s)),
             Response::LightClientBootstrap(b) => {
                 RPCCodedResponse::Success(RPCResponse::LightClientBootstrap(b))
+            }
+            Response::LightClientOptimisticUpdate(o) => {
+                RPCCodedResponse::Success(RPCResponse::LightClientOptimisticUpdate(o))
+            }
+            Response::LightClientFinalityUpdate(f) => {
+                RPCCodedResponse::Success(RPCResponse::LightClientFinalityUpdate(f))
             }
         }
     }

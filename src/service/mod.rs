@@ -153,7 +153,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     ) -> Result<(Self, Arc<NetworkGlobals>)> {
         let log = log.new(o!("service"=> "libp2p"));
 
-        let mut config = ctx.config.clone();
+        let config = ctx.config.clone();
         trace!(log, "Libp2p Service starting");
         // initialise the node's ID
         let local_keypair = utils::load_private_key(&config, &log);
@@ -193,7 +193,24 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             .eth2()
             .expect("Local ENR must have a fork id");
 
-        let score_settings = PeerScoreSettings::new(chain_config, &config.gs_config);
+        let gossipsub_config_params = GossipsubConfigParams {
+            message_domain_valid_snappy: chain_config.message_domain_valid_snappy.into(),
+            gossip_max_size: chain_config.gossip_max_size,
+        };
+
+        let gs_config = gossipsub_config(
+            config.network_load,
+            ctx.fork_context.clone(),
+            gossipsub_config_params,
+            chain_config.seconds_per_slot.get(),
+            chain_config
+                .preset_base
+                .phase0_preset()
+                .slots_per_epoch()
+                .get(),
+        );
+
+        let score_settings = PeerScoreSettings::new(chain_config, &gs_config);
 
         let gossip_cache = {
             let slot_duration = std::time::Duration::from_secs(chain_config.seconds_per_slot.get());
@@ -262,23 +279,6 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 max_subscriptions_per_request: max_topics * 2,
             };
 
-            let gossipsub_config_params = GossipsubConfigParams {
-                message_domain_valid_snappy: chain_config.message_domain_valid_snappy.into(),
-                gossip_max_size: chain_config.gossip_max_size,
-            };
-
-            config.gs_config = gossipsub_config(
-                config.network_load,
-                ctx.fork_context.clone(),
-                gossipsub_config_params,
-                chain_config.seconds_per_slot.get(),
-                chain_config
-                    .preset_base
-                    .phase0_preset()
-                    .slots_per_epoch()
-                    .get(),
-            );
-
             // If metrics are enabled for libp2p build the configuration
             let gossipsub_metrics = ctx.libp2p_registry.as_mut().map(|registry| {
                 (
@@ -287,10 +287,10 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 )
             });
 
-            let snappy_transform = SnappyTransform::new(config.gs_config.max_transmit_size());
+            let snappy_transform = SnappyTransform::new(gs_config.max_transmit_size());
             let mut gossipsub = Gossipsub::new_with_subscription_filter_and_transform(
                 MessageAuthenticity::Anonymous,
-                config.gs_config.clone(),
+                gs_config.clone(),
                 gossipsub_metrics,
                 filter,
                 snappy_transform,
@@ -805,55 +805,57 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         }
     }
 
-    /// Publishes message on the pubsub (gossipsub) behaviour, choosing the encoding.
-    pub fn publish(&mut self, message: PubsubMessage<P>) {
-        for topic in message.topics(GossipEncoding::default(), self.enr_fork_id.fork_digest) {
-            let message_data = message.encode(GossipEncoding::default()).expect("TODO");
+    /// Publishes a list of messages on the pubsub (gossipsub) behaviour, choosing the encoding.
+    pub fn publish(&mut self, messages: Vec<PubsubMessage<P>>) {
+        for message in messages {
+            for topic in message.topics(GossipEncoding::default(), self.enr_fork_id.fork_digest) {
+                let message_data = message.encode(GossipEncoding::default()).expect("TODO");
 
-            if let Err(e) = self
-                .gossipsub_mut()
-                .publish(Topic::from(topic.clone()), message_data.clone())
-            {
-                match e {
-                    PublishError::Duplicate => {
-                        debug!(
-                            self.log,
-                            "Attempted to publish duplicate message";
-                            "kind" => %topic.kind(),
-                        );
+                if let Err(e) = self
+                    .gossipsub_mut()
+                    .publish(Topic::from(topic.clone()), message_data.clone())
+                {
+                    match e {
+                        PublishError::Duplicate => {
+                            debug!(
+                                self.log,
+                                "Attempted to publish duplicate message";
+                                "kind" => %topic.kind(),
+                            );
+                        }
+                        ref e => {
+                            warn!(
+                                self.log,
+                                "Could not publish message";
+                                "error" => ?e,
+                                "kind" => %topic.kind(),
+                            );
+                        }
                     }
-                    ref e => {
-                        warn!(
-                            self.log,
-                            "Could not publish message";
-                            "error" => ?e,
-                            "kind" => %topic.kind(),
-                        );
-                    }
-                }
 
-                // add to metrics
-                match topic.kind() {
-                    GossipKind::Attestation(subnet_id) => {
-                        if let Some(v) = crate::common::metrics::get_int_gauge(
-                            &metrics::FAILED_ATTESTATION_PUBLISHES_PER_SUBNET,
-                            &[&subnet_id.to_string()],
-                        ) {
-                            v.inc()
-                        };
+                    // add to metrics
+                    match topic.kind() {
+                        GossipKind::Attestation(subnet_id) => {
+                            if let Some(v) = crate::common::metrics::get_int_gauge(
+                                &metrics::FAILED_ATTESTATION_PUBLISHES_PER_SUBNET,
+                                &[&subnet_id.to_string()],
+                            ) {
+                                v.inc()
+                            };
+                        }
+                        kind => {
+                            if let Some(v) = crate::common::metrics::get_int_gauge(
+                                &metrics::FAILED_PUBLISHES_PER_MAIN_TOPIC,
+                                &[&format!("{:?}", kind)],
+                            ) {
+                                v.inc()
+                            };
+                        }
                     }
-                    kind => {
-                        if let Some(v) = crate::common::metrics::get_int_gauge(
-                            &metrics::FAILED_PUBLISHES_PER_MAIN_TOPIC,
-                            &[&format!("{:?}", kind)],
-                        ) {
-                            v.inc()
-                        };
-                    }
-                }
 
-                if let PublishError::InsufficientPeers = e {
-                    self.gossip_cache.insert(topic, message_data);
+                    if let PublishError::InsufficientPeers = e {
+                        self.gossip_cache.insert(topic, message_data);
+                    }
                 }
             }
         }
@@ -998,6 +1000,12 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     pub fn goodbye_peer(&mut self, peer_id: &PeerId, reason: GoodbyeReason, source: ReportSource) {
         self.peer_manager_mut()
             .goodbye_peer(peer_id, reason, source);
+    }
+
+    /// Hard (ungraceful) disconnect for testing purposes only
+    /// Use goodbye_peer for disconnections, do not use this function.
+    pub fn __hard_disconnect_testing_only(&mut self, peer_id: PeerId) {
+        let _ = self.swarm.disconnect_peer_id(peer_id);
     }
 
     /// Returns an iterator over all enr entries in the DHT.
@@ -1195,6 +1203,14 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             Request::Status(_) => {
                 crate::common::metrics::inc_counter_vec(&metrics::TOTAL_RPC_REQUESTS, &["status"])
             }
+            Request::LightClientOptimisticUpdate => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["light_client_optimistic_update"],
+            ),
+            Request::LightClientFinalityUpdate => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["light_client_finality_update"],
+            ),
             Request::LightClientBootstrap(_) => crate::common::metrics::inc_counter_vec(
                 &metrics::TOTAL_RPC_REQUESTS,
                 &["light_client_bootstrap"],
@@ -1215,7 +1231,16 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 &metrics::TOTAL_RPC_REQUESTS,
                 &["blobs_by_root"],
             ),
-        }
+            Request::DataColumnsByRoot { .. } => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["data_columns_by_root"],
+            ),
+            Request::DataColumnsByRange { .. } => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["data_columns_by_range"],
+            ),
+        };
+
         NetworkEvent::RequestReceived {
             peer_id,
             id,
@@ -1398,12 +1423,18 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let peer_id = event.peer_id;
 
         if !self.peer_manager().is_connected(&peer_id) {
-            debug!(
-                self.log,
-                "Ignoring rpc message of disconnecting peer";
-                event
-            );
-            return None;
+            // Sync expects a RPCError::Disconnected to drop associated lookups with this peer.
+            // Silencing this event breaks the API contract with RPC where every request ends with
+            // - A stream termination event, or
+            // - An RPCError event
+            if !matches!(event.event, HandlerEvent::Err(HandlerErr::Outbound { .. })) {
+                debug!(
+                    self.log,
+                    "Ignoring rpc message of disconnecting peer";
+                    event
+                );
+                return None;
+            }
         }
 
         let handler_id = event.conn_id;
@@ -1533,11 +1564,43 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                             self.build_request(peer_request_id, peer_id, Request::BlobsByRoot(req));
                         Some(event)
                     }
+                    InboundRequest::DataColumnsByRoot(req) => {
+                        let event = self.build_request(
+                            peer_request_id,
+                            peer_id,
+                            Request::DataColumnsByRoot(req),
+                        );
+                        Some(event)
+                    }
+                    InboundRequest::DataColumnsByRange(req) => {
+                        let event = self.build_request(
+                            peer_request_id,
+                            peer_id,
+                            Request::DataColumnsByRange(req),
+                        );
+                        Some(event)
+                    }
                     InboundRequest::LightClientBootstrap(req) => {
                         let event = self.build_request(
                             peer_request_id,
                             peer_id,
                             Request::LightClientBootstrap(req),
+                        );
+                        Some(event)
+                    }
+                    InboundRequest::LightClientOptimisticUpdate => {
+                        let event = self.build_request(
+                            peer_request_id,
+                            peer_id,
+                            Request::LightClientOptimisticUpdate,
+                        );
+                        Some(event)
+                    }
+                    InboundRequest::LightClientFinalityUpdate => {
+                        let event = self.build_request(
+                            peer_request_id,
+                            peer_id,
+                            Request::LightClientFinalityUpdate,
                         );
                         Some(event)
                     }
@@ -1574,10 +1637,26 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     RPCResponse::BlobsByRoot(resp) => {
                         self.build_response(id, peer_id, Response::BlobsByRoot(Some(resp)))
                     }
+                    RPCResponse::DataColumnsByRoot(resp) => {
+                        self.build_response(id, peer_id, Response::DataColumnsByRoot(Some(resp)))
+                    }
+                    RPCResponse::DataColumnsByRange(resp) => {
+                        self.build_response(id, peer_id, Response::DataColumnsByRange(Some(resp)))
+                    }
                     // Should never be reached
                     RPCResponse::LightClientBootstrap(bootstrap) => {
                         self.build_response(id, peer_id, Response::LightClientBootstrap(bootstrap))
                     }
+                    RPCResponse::LightClientOptimisticUpdate(update) => self.build_response(
+                        id,
+                        peer_id,
+                        Response::LightClientOptimisticUpdate(update),
+                    ),
+                    RPCResponse::LightClientFinalityUpdate(update) => self.build_response(
+                        id,
+                        peer_id,
+                        Response::LightClientFinalityUpdate(update),
+                    ),
                 }
             }
             HandlerEvent::Ok(RPCReceived::EndOfStream(id, termination)) => {
@@ -1586,6 +1665,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     ResponseTermination::BlocksByRoot => Response::BlocksByRoot(None),
                     ResponseTermination::BlobsByRange => Response::BlobsByRange(None),
                     ResponseTermination::BlobsByRoot => Response::BlobsByRoot(None),
+                    ResponseTermination::DataColumnsByRoot => Response::DataColumnsByRoot(None),
+                    ResponseTermination::DataColumnsByRange => Response::DataColumnsByRange(None),
                 };
                 self.build_response(id, peer_id, response)
             }
@@ -1680,12 +1761,16 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             libp2p::upnp::Event::NewExternalAddr(addr) => {
                 info!(self.log, "UPnP route established"; "addr" => %addr);
                 let mut iter = addr.iter();
-                // Skip Ip address.
-                iter.next();
+                let is_ip6 = {
+                    let addr = iter.next();
+                    matches!(addr, Some(MProtocol::Ip6(_)))
+                };
                 match iter.next() {
                     Some(multiaddr::Protocol::Udp(udp_port)) => match iter.next() {
                         Some(multiaddr::Protocol::QuicV1) => {
-                            if let Err(e) = self.discovery_mut().update_enr_quic_port(udp_port) {
+                            if let Err(e) =
+                                self.discovery_mut().update_enr_quic_port(udp_port, is_ip6)
+                            {
                                 warn!(self.log, "Failed to update ENR"; "error" => e);
                             }
                         }
@@ -1694,7 +1779,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                         }
                     },
                     Some(multiaddr::Protocol::Tcp(tcp_port)) => {
-                        if let Err(e) = self.discovery_mut().update_enr_tcp_port(tcp_port) {
+                        if let Err(e) = self.discovery_mut().update_enr_tcp_port(tcp_port, is_ip6) {
                             warn!(self.log, "Failed to update ENR"; "error" => e);
                         }
                     }

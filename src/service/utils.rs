@@ -268,7 +268,7 @@ pub(crate) fn create_whitelist_filter(
             add(BlobSidecar(id));
         }
         for id in 0..data_column_subnet_count {
-            add(DataColumnSidecar(id.try_into().unwrap()));
+            add(DataColumnSidecar(id));
         }
     }
     gossipsub::WhitelistSubscriptionFilter(possible_hashes)

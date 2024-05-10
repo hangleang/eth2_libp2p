@@ -1,6 +1,7 @@
 //! Helper functions and an extension trait for Ethereum 2 ENRs.
 
 pub use discv5::enr::CombinedKey;
+use types::eip7594::{CUSTODY_REQUIREMENT, DATA_COLUMN_SIDECAR_SUBNET_COUNT};
 
 use super::enr_ext::CombinedKeyExt;
 use super::ENR_FILENAME;
@@ -24,6 +25,8 @@ pub const ETH2_ENR_KEY: &str = "eth2";
 pub const ATTESTATION_BITFIELD_ENR_KEY: &str = "attnets";
 /// The ENR field specifying the sync committee subnet bitfield.
 pub const SYNC_COMMITTEE_BITFIELD_ENR_KEY: &str = "syncnets";
+/// The ENR field specifying the peerdas custody subnet count.
+pub const PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY: &str = "custody_subnet_count";
 
 /// Extension trait for ENR's within Eth2.
 pub trait Eth2Enr {
@@ -32,6 +35,9 @@ pub trait Eth2Enr {
 
     /// The sync committee subnet bitfield associated with the ENR.
     fn sync_committee_bitfield(&self) -> Result<EnrSyncCommitteeBitfield, &'static str>;
+
+    /// The peerdas custody subnet count associated with the ENR.
+    fn custody_subnet_count(&self) -> Result<u64, &'static str>;
 
     fn eth2(&self) -> Result<EnrForkId, &'static str>;
 }
@@ -53,6 +59,21 @@ impl Eth2Enr for Enr {
 
         EnrSyncCommitteeBitfield::from_ssz_default(bitfield_bytes)
             .map_err(|_| "Could not decode the ENR syncnets bitfield")
+    }
+
+    fn custody_subnet_count(&self) -> Result<u64, &'static str> {
+        // NOTE: if the custody value is non-existent in the ENR, then we assume the minimum
+        // custody value defined in the spec.
+        let min_custody_bytes = CUSTODY_REQUIREMENT
+            .to_ssz()
+            .map_err(|_| "Could not serialize CUSTODY_REQUIREMENT as SSZ")?;
+
+        let custody_bytes = self
+            .get(PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY)
+            .unwrap_or(&min_custody_bytes);
+
+        u64::from_ssz_default(custody_bytes)
+            .map_err(|_| "Could not decode the ENR custody subnet count")
     }
 
     fn eth2(&self) -> Result<EnrForkId, &'static str> {
@@ -228,6 +249,18 @@ pub fn build_enr(
         &bitfield.to_ssz()?.as_slice(),
     );
 
+    // set the "custody_subnet_count" field on our ENR
+    let custody_subnet_count = if config.subscribe_all_data_column_subnets {
+        DATA_COLUMN_SIDECAR_SUBNET_COUNT
+    } else {
+        CUSTODY_REQUIREMENT
+    };
+
+    builder.add_value(
+        PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
+        &custody_subnet_count.to_ssz()?,
+    );
+
     builder
         .build(enr_key)
         .map_err(|e| anyhow!("Could not build Local ENR: {:?}", e))
@@ -251,10 +284,12 @@ fn compare_enr(local_enr: &Enr, disk_enr: &Enr) -> bool {
         // take preference over disk udp port if one is not specified
         && (local_enr.udp4().is_none() || local_enr.udp4() == disk_enr.udp4())
         && (local_enr.udp6().is_none() || local_enr.udp6() == disk_enr.udp6())
-        // we need the ATTESTATION_BITFIELD_ENR_KEY and SYNC_COMMITTEE_BITFIELD_ENR_KEY key to match,
-        // otherwise we use a new ENR. This will likely only be true for non-validating nodes
+        // we need the ATTESTATION_BITFIELD_ENR_KEY and SYNC_COMMITTEE_BITFIELD_ENR_KEY and
+        // PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY key to match, otherwise we use a new ENR. This will
+        // likely only be true for non-validating nodes.
         && local_enr.get(ATTESTATION_BITFIELD_ENR_KEY) == disk_enr.get(ATTESTATION_BITFIELD_ENR_KEY)
         && local_enr.get(SYNC_COMMITTEE_BITFIELD_ENR_KEY) == disk_enr.get(SYNC_COMMITTEE_BITFIELD_ENR_KEY)
+        && local_enr.get(PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY) == disk_enr.get(PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY)
 }
 
 /// Loads enr from the given directory

@@ -1,20 +1,23 @@
 //! Available RPC methods types and ids.
-use std::fmt::Display;
-
 use crate::types::{EnrAttestationBitfield, EnrSyncCommitteeBitfield};
 use anyhow::Result;
 use regex::bytes::Regex;
 use serde::Serialize;
 use ssz::{ContiguousList, ReadError, Size, Ssz, SszRead, SszSize, SszWrite, WriteError};
+use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::{ops::Deref, sync::Arc};
 use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
-use typenum::{Unsigned as _, U1024, U128, U256, U768};
+use typenum::{Prod, Unsigned as _, U1024, U128, U256, U768};
+use types::combined::{LightClientFinalityUpdate, LightClientOptimisticUpdate};
 use types::deneb::containers::BlobIdentifier;
+use types::eip7594::DataColumnSidecar;
 use types::{
     combined::{LightClientBootstrap, SignedBeaconBlock},
     deneb::containers::BlobSidecar,
+    eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns},
     phase0::primitives::{Epoch, ForkDigest, Slot, H256},
     preset::Preset,
     traits::SignedBeaconBlock as _,
@@ -33,6 +36,8 @@ pub const MAX_REQUEST_BLOCKS_DENEB: u64 = 128;
 
 pub type MaxRequestBlobSidecars = U768;
 pub const MAX_REQUEST_BLOB_SIDECARS: u64 = 768;
+
+pub type MaxRequestDataColumnSidecars = Prod<MaxRequestBlocksDeneb, NumberOfColumns>;
 
 /// Wrapper over SSZ List to represent error message in rpc responses.
 #[derive(Debug, Clone)]
@@ -287,6 +292,25 @@ impl SszWrite for GoodbyeReason {
     }
 }
 
+/// Request a number of beacon data columns from a peer.
+#[derive(Clone, Debug, PartialEq, Eq, Ssz)]
+pub struct DataColumnsByRangeRequest {
+    /// The starting slot to request data columns.
+    pub start_slot: u64,
+    /// The number of slots from the start slot.
+    pub count: u64,
+    /// The list column indices being requested.
+    pub columns: ContiguousList<ColumnIndex, MaxRequestDataColumnSidecars>,
+}
+
+impl DataColumnsByRangeRequest {
+    pub fn max_requested<P: Preset>(&self) -> u64 {
+        self.count
+            .saturating_mul(P::MaxBlobsPerBlock::U64)
+            .saturating_mul(self.columns.len() as u64)
+    }
+}
+
 /// Request a number of beacon blobs from a peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ssz)]
 pub struct BlobsByRangeRequest {
@@ -509,6 +533,32 @@ impl BlobsByRootRequest {
     }
 }
 
+/// Request a number of data columns from a peer.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataColumnsByRootRequest {
+    /// The list of beacon block roots and column indices being requested.
+    pub data_column_ids: ContiguousList<DataColumnIdentifier, MaxRequestDataColumnSidecars>,
+}
+
+impl DataColumnsByRootRequest {
+    pub fn new(
+        data_column_ids: ContiguousList<DataColumnIdentifier, MaxRequestDataColumnSidecars>,
+    ) -> Self {
+        Self { data_column_ids }
+    }
+
+    pub fn group_by_ordered_block_root(&self) -> Vec<(H256, Vec<ColumnIndex>)> {
+        let mut column_indexes_by_block = BTreeMap::<H256, Vec<ColumnIndex>>::new();
+        for request_id in self.data_column_ids.iter() {
+            column_indexes_by_block
+                .entry(request_id.block_root)
+                .or_default()
+                .push(request_id.index);
+        }
+        column_indexes_by_block.into_iter().collect()
+    }
+}
+
 /* RPC Handling and Grouping */
 // Collection of enums and structs used by the Codecs to encode/decode RPC messages
 
@@ -529,9 +579,19 @@ pub enum RPCResponse<P: Preset> {
 
     /// A response to a get LIGHT_CLIENT_BOOTSTRAP request.
     LightClientBootstrap(Arc<LightClientBootstrap<P>>),
+    /// A response to a get LIGHT_CLIENT_OPTIMISTIC_UPDATE request.
+    LightClientOptimisticUpdate(Arc<LightClientOptimisticUpdate<P>>),
+
+    /// A response to a get LIGHT_CLIENT_FINALITY_UPDATE request.
+    LightClientFinalityUpdate(Arc<LightClientFinalityUpdate<P>>),
 
     /// A response to a get BLOBS_BY_ROOT request.
     BlobsByRoot(Arc<BlobSidecar<P>>),
+    /// A response to a get DATA_COLUMN_SIDECARS_BY_ROOT request.
+    DataColumnsByRoot(Arc<DataColumnSidecar<P>>),
+
+    /// A response to a get DATA_COLUMN_SIDECARS_BY_RANGE request.
+    DataColumnsByRange(Arc<DataColumnSidecar<P>>),
 
     /// A PONG response to a PING request.
     Pong(Ping),
@@ -554,6 +614,12 @@ pub enum ResponseTermination {
 
     /// Blobs by root stream termination.
     BlobsByRoot,
+
+    /// Data column sidecars by root stream termination.
+    DataColumnsByRoot,
+
+    /// Data column sidecars by range stream termination.
+    DataColumnsByRange,
 }
 
 /// The structured response containing a result/code indicating success or failure
@@ -616,25 +682,6 @@ impl<P: Preset> RPCCodedResponse<P> {
         RPCCodedResponse::Error(code, err)
     }
 
-    /// Specifies which response allows for multiple chunks for the stream handler.
-    pub fn multiple_responses(&self) -> bool {
-        match self {
-            RPCCodedResponse::Success(resp) => match resp {
-                RPCResponse::Status(_) => false,
-                RPCResponse::BlocksByRange(_) => true,
-                RPCResponse::BlocksByRoot(_) => true,
-                RPCResponse::BlobsByRange(_) => true,
-                RPCResponse::BlobsByRoot(_) => true,
-                RPCResponse::Pong(_) => false,
-                RPCResponse::MetaData(_) => false,
-                RPCResponse::LightClientBootstrap(_) => false,
-            },
-            RPCCodedResponse::Error(_, _) => true,
-            // Stream terminations are part of responses that have chunks
-            RPCCodedResponse::StreamTermination(_) => true,
-        }
-    }
-
     /// Returns true if this response always terminates the stream.
     pub fn close_after(&self) -> bool {
         !matches!(self, RPCCodedResponse::Success(_))
@@ -663,9 +710,13 @@ impl<P: Preset> RPCResponse<P> {
             RPCResponse::BlocksByRoot(_) => Protocol::BlocksByRoot,
             RPCResponse::BlobsByRange(_) => Protocol::BlobsByRange,
             RPCResponse::BlobsByRoot(_) => Protocol::BlobsByRoot,
+            RPCResponse::DataColumnsByRoot(_) => Protocol::DataColumnsByRoot,
+            RPCResponse::DataColumnsByRange(_) => Protocol::DataColumnsByRange,
             RPCResponse::Pong(_) => Protocol::Ping,
             RPCResponse::MetaData(_) => Protocol::MetaData,
             RPCResponse::LightClientBootstrap(_) => Protocol::LightClientBootstrap,
+            RPCResponse::LightClientOptimisticUpdate(_) => Protocol::LightClientOptimisticUpdate,
+            RPCResponse::LightClientFinalityUpdate(_) => Protocol::LightClientFinalityUpdate,
         }
     }
 }
@@ -714,10 +765,34 @@ impl<P: Preset> std::fmt::Display for RPCResponse<P> {
                     sidecar.signed_block_header.message.slot
                 )
             }
+            RPCResponse::DataColumnsByRoot(sidecar) => {
+                write!(f, "DataColumnsByRoot: Data column slot: {}", sidecar.slot())
+            }
+            RPCResponse::DataColumnsByRange(sidecar) => {
+                write!(
+                    f,
+                    "DataColumnsByRange: Data column slot: {}",
+                    sidecar.slot()
+                )
+            }
             RPCResponse::Pong(ping) => write!(f, "Pong: {}", ping.data),
             RPCResponse::MetaData(metadata) => write!(f, "Metadata: {}", metadata.seq_number()),
             RPCResponse::LightClientBootstrap(bootstrap) => {
                 write!(f, "LightClientBootstrap Slot: {}", bootstrap.slot())
+            }
+            RPCResponse::LightClientOptimisticUpdate(update) => {
+                write!(
+                    f,
+                    "LightClientOptimisticUpdate Slot: {}",
+                    update.signature_slot()
+                )
+            }
+            RPCResponse::LightClientFinalityUpdate(update) => {
+                write!(
+                    f,
+                    "LightClientFinalityUpdate Slot: {}",
+                    update.signature_slot()
+                )
             }
         }
     }
@@ -788,6 +863,16 @@ impl std::fmt::Display for BlobsByRangeRequest {
             f,
             "Request: BlobsByRange: Start Slot: {}, Count: {}",
             self.start_slot, self.count
+        )
+    }
+}
+
+impl std::fmt::Display for DataColumnsByRootRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Request: DataColumnsByRoot: Number of Requested Data Column Ids: {}",
+            self.data_column_ids.len()
         )
     }
 }

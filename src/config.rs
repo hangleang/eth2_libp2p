@@ -69,10 +69,6 @@ pub struct Config {
     /// Target number of connected peers.
     pub target_peers: usize,
 
-    /// Gossipsub configuration parameters.
-    #[serde(skip)]
-    pub gs_config: gossipsub::Config,
-
     /// Discv5 configuration parameters.
     #[serde(skip)]
     pub discv5_config: discv5::Config,
@@ -103,6 +99,9 @@ pub struct Config {
 
     /// Attempt to construct external port mappings with UPnP.
     pub upnp_enabled: bool,
+
+    /// Subscribe to all data column subnets for the duration of the runtime.
+    pub subscribe_all_data_column_subnets: bool,
 
     /// Subscribe to all subnets for the duration of the runtime.
     pub subscribe_all_subnets: bool,
@@ -278,12 +277,6 @@ impl Default for Config {
             .join(DEFAULT_BEACON_NODE_DIR)
             .join(DEFAULT_NETWORK_DIR);
 
-        // Note: Using the default config here. Use `gossipsub_config` function for getting
-        // Specific configuration for gossipsub.
-        let gs_config = gossipsub::ConfigBuilder::default()
-            .build()
-            .expect("valid gossipsub configuration");
-
         // Discv5 Unsolicited Packet Rate Limiter
         let filter_rate_limiter = Some(
             discv5::RateLimiterBuilder::new()
@@ -336,7 +329,6 @@ impl Default for Config {
             enr_quic6_port: None,
             enr_tcp6_port: None,
             target_peers: 100,
-            gs_config,
             discv5_config,
             boot_nodes_enr: vec![],
             boot_nodes_multiaddr: vec![],
@@ -349,6 +341,7 @@ impl Default for Config {
             upnp_enabled: true,
             network_load: 4,
             private: false,
+            subscribe_all_data_column_subnets: false,
             subscribe_all_subnets: false,
             import_all_attestations: false,
             shutdown_after_sync: false,
@@ -470,7 +463,7 @@ pub fn gossipsub_config(
         }
     }
     let message_domain_valid_snappy = gossipsub_config_params.message_domain_valid_snappy;
-    let is_merge_enabled = fork_context.fork_exists(Phase::Bellatrix);
+    let is_bellatrix_enabled = fork_context.fork_exists(Phase::Bellatrix);
     let gossip_message_id = move |message: &gossipsub::Message| {
         gossipsub::MessageId::from(
             &Sha256::digest(
@@ -490,7 +483,7 @@ pub fn gossipsub_config(
 
     gossipsub::ConfigBuilder::default()
         .max_transmit_size(gossip_max_size(
-            is_merge_enabled,
+            is_bellatrix_enabled,
             gossipsub_config_params.gossip_max_size,
         ))
         .heartbeat_interval(load.heartbeat_interval)

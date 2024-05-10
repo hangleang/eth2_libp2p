@@ -19,7 +19,9 @@ delay_map = { workspace = true }
 dirs = { workspace = true }
 discv5 = { workspace = true }
 either = { workspace = true }
+eip_7594 = { workspace = true }
 enum-iterator = { workspace = true }
+ethereum-types = { workspace = true }
 fnv = { workspace = true }
 futures = { workspace = true }
 futures-ticker = { workspace = true }
@@ -31,6 +33,7 @@ helper_functions = { workspace = true }
 hex = { workspace = true }
 hex_fmt = { workspace = true }
 instant = { workspace = true }
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 libp2p = { workspace = true }
 libp2p-mplex = { workspace = true }
