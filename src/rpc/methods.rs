@@ -300,7 +300,7 @@ pub struct DataColumnsByRangeRequest {
     /// The number of slots from the start slot.
     pub count: u64,
     /// The list column indices being requested.
-    pub columns: ContiguousList<ColumnIndex, MaxRequestDataColumnSidecars>,
+    pub columns: ContiguousList<ColumnIndex, NumberOfColumns>,
 }
 
 impl DataColumnsByRangeRequest {
