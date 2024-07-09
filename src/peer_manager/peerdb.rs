@@ -1,9 +1,11 @@
+use crate::discovery::enr::PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY;
 use crate::discovery::CombinedKey;
 use crate::{metrics, multiaddr::Multiaddr, types::Subnet, Enr, Gossipsub, PeerId};
 use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
+use ssz::SszWrite as _;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
@@ -12,7 +14,7 @@ use std::{
     fmt::Formatter,
 };
 use sync_status::SyncStatus;
-
+use types::eip7594::DATA_COLUMN_SIDECAR_SUBNET_COUNT;
 pub mod client;
 pub mod peer_info;
 pub mod score;
@@ -679,9 +681,21 @@ impl PeerDB {
     }
 
     /// Updates the connection state. MUST ONLY BE USED IN TESTS.
-    pub fn __add_connected_peer_testing_only(&mut self, peer_id: &PeerId) -> Option<BanOperation> {
+    pub fn __add_connected_peer_testing_only(
+        &mut self,
+        peer_id: &PeerId,
+        supernode: bool,
+    ) -> Option<BanOperation> {
         let enr_key = CombinedKey::generate_secp256k1();
-        let enr = Enr::builder().build(&enr_key).unwrap();
+        let mut enr = Enr::builder().build(&enr_key).unwrap();
+        if supernode {
+            enr.insert(
+                PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
+                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT).to_ssz().unwrap(),
+                &enr_key,
+            )
+            .expect("u64 can be encoded");
+        }
         self.update_connection_state(
             peer_id,
             NewConnectionState::Connected {
