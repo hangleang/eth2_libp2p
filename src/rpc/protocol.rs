@@ -220,8 +220,10 @@ impl Protocol {
     }
 }
 
+/// Protocol names to be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 /// RPC Encondings supported.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Encoding {
     SSZSnappy,
 }
@@ -599,6 +601,8 @@ pub enum InboundRequest<P: Preset> {
 
 /// Implements the encoding per supported protocol for `RPCRequest`.
 impl<P: Preset> InboundRequest<P> {
+    /* These functions are used in the handler for stream management */
+
     /// Maximum number of responses expected for this request.
     pub fn max_responses(&self) -> u64 {
         match self {
@@ -782,7 +786,7 @@ impl<P: Preset> std::fmt::Display for InboundRequest<P> {
             InboundRequest::Ping(ping) => write!(f, "Ping: {}", ping.data),
             InboundRequest::MetaData(_) => write!(f, "MetaData request"),
             InboundRequest::LightClientBootstrap(bootstrap) => {
-                write!(f, "Light client boostrap: {}", bootstrap.root)
+                write!(f, "LightClientBootstrap: {}", bootstrap.root)
             }
             InboundRequest::LightClientOptimisticUpdate => {
                 write!(f, "Light client optimistic update request")

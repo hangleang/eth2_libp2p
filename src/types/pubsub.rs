@@ -38,7 +38,7 @@ pub enum PubsubMessage<P: Preset> {
     /// Gossipsub message providing notification of a [`DataColumnSidecar`] along with the subnet id where it was received.
     DataColumnSidecar(Box<(SubnetId, Arc<DataColumnSidecar<P>>)>),
     /// Gossipsub message providing notification of a Aggregate attestation and associated proof.
-    AggregateAndProofAttestation(Box<SignedAggregateAndProof<P>>),
+    AggregateAndProofAttestation(Arc<SignedAggregateAndProof<P>>),
     /// Gossipsub message providing notification of a raw un-aggregated attestation with its shard id.
     Attestation(SubnetId, Arc<Attestation<P>>),
     /// Gossipsub message providing notification of a voluntary exit.
@@ -173,7 +173,7 @@ impl<P: Preset> PubsubMessage<P> {
                     GossipKind::BeaconAggregateAndProof => {
                         let agg_and_proof = SignedAggregateAndProof::from_ssz_default(data)
                             .map_err(|e| format!("{:?}", e))?;
-                        Ok(PubsubMessage::AggregateAndProofAttestation(Box::new(
+                        Ok(PubsubMessage::AggregateAndProofAttestation(Arc::new(
                             agg_and_proof,
                         )))
                     }

@@ -3,7 +3,6 @@
 use crate::common::time_cache::LRUTimeCache;
 use crate::discovery::enr_ext::EnrExt;
 use crate::rpc::{GoodbyeReason, MetaData, Protocol, RPCError, RPCResponseErrorCode};
-use crate::service::TARGET_SUBNET_PEERS;
 use crate::{metrics, Gossipsub};
 use crate::{NetworkGlobals, PeerId};
 use crate::{Subnet, SubnetDiscovery};
@@ -558,7 +557,7 @@ impl PeerManager {
                     Protocol::BlocksByRange => PeerAction::MidToleranceError,
                     Protocol::BlocksByRoot => PeerAction::MidToleranceError,
                     Protocol::BlobsByRange => PeerAction::MidToleranceError,
-                    // Lighthouse does not currently make light client requests; therefore, this
+                    // Grandine does not currently make light client requests; therefore, this
                     // is an unexpected scenario. We do not ban the peer for rate limiting.
                     Protocol::LightClientBootstrap => return,
                     Protocol::LightClientOptimisticUpdate => return,
@@ -852,7 +851,7 @@ impl PeerManager {
                     .read()
                     .good_peers_on_subnet(Subnet::SyncCommittee(*k))
                     .count()
-                    < TARGET_SUBNET_PEERS
+                    < self.network_globals.target_subnet_peers
                 {
                     Some(SubnetDiscovery {
                         subnet: Subnet::SyncCommittee(*k),

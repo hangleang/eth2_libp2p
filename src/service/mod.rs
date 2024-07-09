@@ -62,8 +62,6 @@ mod behaviour;
 mod gossip_cache;
 pub mod gossipsub_scoring_parameters;
 pub mod utils;
-/// The number of peers we target per subnet for discovery queries.
-pub const TARGET_SUBNET_PEERS: usize = 6;
 
 const MAX_IDENTIFY_ADDRESSES: usize = 10;
 
@@ -182,6 +180,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 meta_data,
                 trusted_peers,
                 config.disable_peer_scoring,
+                config.target_subnet_peers,
                 &log,
             );
             Arc::new(globals)
@@ -210,7 +209,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 .get(),
         );
 
-        let score_settings = PeerScoreSettings::new(chain_config, &gs_config);
+        let score_settings = PeerScoreSettings::new(chain_config, gs_config.mesh_n());
 
         let gossip_cache = {
             let slot_duration = std::time::Duration::from_secs(chain_config.seconds_per_slot.get());
@@ -947,12 +946,23 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     /* Eth2 RPC behaviour functions */
 
     /// Send a request to a peer over RPC.
-    pub fn send_request(&mut self, peer_id: PeerId, request_id: AppReqId, request: Request) {
+    pub fn send_request(
+        &mut self,
+        peer_id: PeerId,
+        request_id: AppReqId,
+        request: Request,
+    ) -> Result<(), (AppReqId, RPCError)> {
+        // Check if the peer is connected before sending an RPC request
+        if !self.swarm.is_connected(&peer_id) {
+            return Err((request_id, RPCError::Disconnected));
+        }
+
         self.eth2_rpc_mut().send_request(
             peer_id,
             RequestId::Application(request_id),
             request.into(),
-        )
+        );
+        Ok(())
     }
 
     /// Send a successful response to a peer over RPC.
@@ -1058,14 +1068,14 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     .read()
                     .good_peers_on_subnet(s.subnet)
                     .count();
-                if peers_on_subnet >= TARGET_SUBNET_PEERS {
+                if peers_on_subnet >= self.network_globals.target_subnet_peers {
                     trace!(
                         self.log,
                         "Discovery query ignored";
                         "subnet" => ?s.subnet,
                         "reason" => "Already connected to desired peers",
                         "connected_peers_on_subnet" => peers_on_subnet,
-                        "target_subnet_peers" => TARGET_SUBNET_PEERS,
+                        "target_subnet_peers" => self.network_globals.target_subnet_peers,
                     );
                     false
                 // Queue an outgoing connection request to the cached peers that are on `s.subnet_id`.
@@ -1214,6 +1224,14 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             Request::LightClientBootstrap(_) => crate::common::metrics::inc_counter_vec(
                 &metrics::TOTAL_RPC_REQUESTS,
                 &["light_client_bootstrap"],
+            ),
+            Request::LightClientOptimisticUpdate => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["light_client_optimistic_update"],
+            ),
+            Request::LightClientFinalityUpdate => crate::common::metrics::inc_counter_vec(
+                &metrics::TOTAL_RPC_REQUESTS,
+                &["light_client_finality_update"],
             ),
             Request::BlocksByRange { .. } => crate::common::metrics::inc_counter_vec(
                 &metrics::TOTAL_RPC_REQUESTS,
@@ -1423,18 +1441,12 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let peer_id = event.peer_id;
 
         if !self.peer_manager().is_connected(&peer_id) {
-            // Sync expects a RPCError::Disconnected to drop associated lookups with this peer.
-            // Silencing this event breaks the API contract with RPC where every request ends with
-            // - A stream termination event, or
-            // - An RPCError event
-            if !matches!(event.event, HandlerEvent::Err(HandlerErr::Outbound { .. })) {
-                debug!(
-                    self.log,
-                    "Ignoring rpc message of disconnecting peer";
-                    event
-                );
-                return None;
-            }
+            debug!(
+                self.log,
+                "Ignoring rpc message of disconnecting peer";
+                event
+            );
+            return None;
         }
 
         let handler_id = event.conn_id;

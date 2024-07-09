@@ -69,6 +69,9 @@ pub struct Config {
     /// Target number of connected peers.
     pub target_peers: usize,
 
+    /// Target number of connected peers.
+    pub target_subnet_peers: usize,
+
     /// Discv5 configuration parameters.
     #[serde(skip)]
     pub discv5_config: discv5::Config,
@@ -329,6 +332,7 @@ impl Default for Config {
             enr_quic6_port: None,
             enr_tcp6_port: None,
             target_peers: 100,
+            target_subnet_peers: 3,
             discv5_config,
             boot_nodes_enr: vec![],
             boot_nodes_multiaddr: vec![],

@@ -11,13 +11,13 @@ use std::{ops::Deref, sync::Arc};
 use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
 use typenum::{Prod, Unsigned as _, U1024, U128, U256, U768};
-use types::combined::{LightClientFinalityUpdate, LightClientOptimisticUpdate};
-use types::deneb::containers::BlobIdentifier;
-use types::eip7594::DataColumnSidecar;
 use types::{
-    combined::{LightClientBootstrap, SignedBeaconBlock},
-    deneb::containers::BlobSidecar,
-    eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns},
+    combined::{
+        LightClientBootstrap, LightClientFinalityUpdate, LightClientOptimisticUpdate,
+        SignedBeaconBlock,
+    },
+    deneb::containers::{BlobSidecar, BlobIdentifier},
+    eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns, DataColumnSidecar},
     phase0::primitives::{Epoch, ForkDigest, Slot, H256},
     preset::Preset,
     traits::SignedBeaconBlock as _,
