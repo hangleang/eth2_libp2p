@@ -16,11 +16,8 @@ pub fn subnet_predicate(subnets: Vec<Subnet>, log: &slog::Logger) -> impl Fn(&En
         // Pre-fork/fork-boundary enrs may not contain a syncnets field.
         // Don't return early here
         let sync_committee_bitfield = enr.sync_committee_bitfield().ok();
-        // Pre-fork/fork-boundary enrs may not contain a peerdas custody field.
-        // Don't return early here.
-        //
-        // NOTE: we could map to minimum custody requirement here.
-        let custody_subnet_count: Result<u64, _> = enr.custody_subnet_count();
+
+        let custody_subnet_count = enr.custody_subnet_count();
 
         let predicate = subnets.iter().copied().any(|subnet| match subnet {
             Subnet::Attestation(subnet_id) => attestation_bitfield
@@ -29,13 +26,13 @@ pub fn subnet_predicate(subnets: Vec<Subnet>, log: &slog::Logger) -> impl Fn(&En
             Subnet::SyncCommittee(subnet_id) => sync_committee_bitfield
                 .and_then(|bitfield| bitfield.get(subnet_id as usize))
                 .unwrap_or_default(),
-            Subnet::DataColumn(s) => custody_subnet_count.map_or(false, |count| {
+            Subnet::DataColumn(s) => {
                 let subnets = eip_7594::get_custody_columns(
                     Uint256::from(U256::from(enr.node_id().raw())),
-                    count,
+                    custody_subnet_count,
                 );
                 subnets.contains(&s)
-            }),
+            }
         });
 
         if !predicate {
