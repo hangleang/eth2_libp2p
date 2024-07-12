@@ -7,6 +7,7 @@ use crate::types::ForkContext;
 use futures::future::BoxFuture;
 use futures::prelude::{AsyncRead, AsyncWrite};
 use futures::{FutureExt, StreamExt};
+use lazy_static::lazy_static;
 use libp2p::core::{InboundUpgrade, UpgradeInfo};
 use ssz::{ReadError, SszSize as _, SszWrite as _, WriteError};
 use std::io;

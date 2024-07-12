@@ -6,11 +6,11 @@
 //!
 //! The scoring algorithms are currently experimental.
 use crate::service::gossipsub_scoring_parameters::GREYLIST_THRESHOLD as GOSSIPSUB_GREYLIST_THRESHOLD;
+use lazy_static::lazy_static;
 use serde::Serialize;
 use std::time::Instant;
 use strum::AsRefStr;
 use tokio::time::Duration;
-
 lazy_static! {
     static ref HALFLIFE_DECAY: f64 = -(2.0f64.ln()) / SCORE_HALFLIFE;
 }
