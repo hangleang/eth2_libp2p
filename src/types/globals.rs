@@ -118,12 +118,12 @@ impl NetworkGlobals {
     }
 
     /// Compute custody data columns the node is assigned to custody.
-    pub fn custody_columns(&self, _epoch: Epoch) -> Result<Vec<ColumnIndex>, &'static str> {
+    pub fn custody_columns(&self, _epoch: Epoch) -> Vec<ColumnIndex> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         // TODO(das): cache this number at start-up to not make this fallible
         let custody_subnet_count = enr.custody_subnet_count();
-        Ok(eip_7594::get_custody_columns(node_id, custody_subnet_count))
+        eip_7594::get_custody_columns(node_id, custody_subnet_count)
     }
 
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
@@ -174,7 +174,7 @@ mod test {
 
         let globals = NetworkGlobals::new_test_globals(vec![], &log);
         let any_epoch = 0;
-        let columns = globals.custody_columns(any_epoch).unwrap();
+        let columns = globals.custody_columns(any_epoch);
 
         assert_eq!(
             columns.len(),
