@@ -690,7 +690,7 @@ impl PeerDB {
         if supernode {
             enr.insert(
                 PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
-                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT).to_be_bytes().as_slice(),
+                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT),
                 &enr_key,
             )
             .expect("u64 can be encoded");
