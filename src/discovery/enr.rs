@@ -26,7 +26,7 @@ pub const ATTESTATION_BITFIELD_ENR_KEY: &str = "attnets";
 /// The ENR field specifying the sync committee subnet bitfield.
 pub const SYNC_COMMITTEE_BITFIELD_ENR_KEY: &str = "syncnets";
 /// The ENR field specifying the peerdas custody subnet count.
-pub const PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY: &str = "custody_subnet_count";
+pub const PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY: &str = "csc";
 
 /// Extension trait for ENR's within Eth2.
 pub trait Eth2Enr {
@@ -65,7 +65,9 @@ impl Eth2Enr for Enr {
     /// defined in the spec.
     fn custody_subnet_count(&self) -> u64 {
         self.get(PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY)
-            .and_then(|custody_bytes| u64::from_ssz_default(custody_bytes).ok())
+        .and_then(|custody_bytes| custody_bytes.try_into().map(u64::from_be_bytes).ok())
+        // If value supplied in ENR is invalid, fallback to `custody_requirement`
+        .filter(|csc| csc <= &DATA_COLUMN_SIDECAR_SUBNET_COUNT)
             .unwrap_or(CUSTODY_REQUIREMENT as u64)
     }
 
@@ -249,10 +251,8 @@ pub fn build_enr(
         CUSTODY_REQUIREMENT
     };
 
-    builder.add_value(
-        PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
-        &custody_subnet_count.to_ssz()?,
-    );
+    let csc_bytes = custody_subnet_count.to_be_bytes();
+    builder.add_value(PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY, &csc_bytes.as_slice());
 
     builder
         .build(enr_key)
@@ -317,5 +317,57 @@ pub fn save_enr_to_disk(dir: Option<&Path>, enr: &Enr, log: &slog::Logger) {
                 "Could not write ENR to file"; "file" => format!("{:?}{:?}",dir, ENR_FILENAME),  "error" => %e
             );
         }
+    }
+}
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::config::Config as NetworkConfig;
+    use types::eip7594::{CUSTODY_REQUIREMENT, DATA_COLUMN_SIDECAR_SUBNET_COUNT};
+
+    #[test]
+    fn custody_subnet_count_default() {
+        let config = NetworkConfig {
+            subscribe_all_data_column_subnets: false,
+            ..NetworkConfig::default()
+        };
+        let enr = build_enr_with_config(config).0;
+
+        assert_eq!(enr.custody_subnet_count(), CUSTODY_REQUIREMENT,);
+    }
+
+    #[test]
+    fn custody_subnet_count_all() {
+        let config = NetworkConfig {
+            subscribe_all_data_column_subnets: true,
+            ..NetworkConfig::default()
+        };
+        let enr = build_enr_with_config(config).0;
+
+        assert_eq!(enr.custody_subnet_count(), DATA_COLUMN_SIDECAR_SUBNET_COUNT,);
+    }
+
+    #[test]
+    fn custody_subnet_count_fallback_default() {
+        let config = NetworkConfig::default();
+        let (mut enr, enr_key) = build_enr_with_config(config);
+        let invalid_subnet_count = 999u64;
+
+        enr.insert(
+            PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
+            &invalid_subnet_count.to_be_bytes().as_slice(),
+            &enr_key,
+        )
+        .unwrap();
+
+        assert_eq!(enr.custody_subnet_count(), CUSTODY_REQUIREMENT,);
+    }
+
+    fn build_enr_with_config(config: NetworkConfig) -> (Enr, CombinedKey) {
+        let keypair = libp2p::identity::secp256k1::Keypair::generate();
+        let enr_key = CombinedKey::from_secp256k1(&keypair);
+        let enr_fork_id = EnrForkId::default();
+        let enr = build_enr(&enr_key, &config, &enr_fork_id).unwrap();
+        (enr, enr_key)
     }
 }

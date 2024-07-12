@@ -5,7 +5,6 @@ use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
-use ssz::SszWrite as _;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
@@ -691,7 +690,7 @@ impl PeerDB {
         if supernode {
             enr.insert(
                 PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
-                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT).to_ssz().unwrap(),
+                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT).to_be_bytes().as_slice(),
                 &enr_key,
             )
             .expect("u64 can be encoded");
