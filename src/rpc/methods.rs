@@ -305,9 +305,7 @@ pub struct DataColumnsByRangeRequest {
 
 impl DataColumnsByRangeRequest {
     pub fn max_requested<P: Preset>(&self) -> u64 {
-        self.count
-            .saturating_mul(P::MaxBlobsPerBlock::U64)
-            .saturating_mul(self.columns.len() as u64)
+        self.count.saturating_mul(self.columns.len() as u64)
     }
     pub fn ssz_min_len() -> usize {
         DataColumnsByRangeRequest {
