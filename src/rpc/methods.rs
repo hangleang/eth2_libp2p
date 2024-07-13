@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 use std::{ops::Deref, sync::Arc};
 use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
-use typenum::{Prod, Unsigned as _, U1024, U128, U256, U768};
+use typenum::{Prod, Unsigned, U1024, U128, U256, U768};
 use types::combined::{LightClientFinalityUpdate, LightClientOptimisticUpdate};
 use types::deneb::containers::BlobIdentifier;
 use types::eip7594::DataColumnSidecar;
@@ -308,6 +308,35 @@ impl DataColumnsByRangeRequest {
         self.count
             .saturating_mul(P::MaxBlobsPerBlock::U64)
             .saturating_mul(self.columns.len() as u64)
+    }
+    pub fn ssz_min_len() -> usize {
+        DataColumnsByRangeRequest {
+            start_slot: 0,
+            count: 0,
+            columns: Arc::new(
+                ContiguousList::<ColumnIndex, NumberOfColumns>::try_from(vec![0])
+                    .expect("Should not exceed maximum number of columns"),
+            ),
+        }
+        .to_ssz()
+        .unwrap()
+        .len()
+    }
+
+    pub fn ssz_max_len() -> usize {
+        DataColumnsByRangeRequest {
+            start_slot: 0,
+            count: 0,
+            columns: Arc::new(
+                ContiguousList::<ColumnIndex, NumberOfColumns>::try_from(
+                    vec![0; NumberOfColumns::USIZE],
+                )
+                .expect("Should not exceed maximum number of columns"),
+            ),
+        }
+        .to_ssz()
+        .unwrap()
+        .len()
     }
 }
 

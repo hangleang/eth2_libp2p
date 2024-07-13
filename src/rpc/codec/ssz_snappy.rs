@@ -846,7 +846,7 @@ mod tests {
     use ssz::ByteList;
     use std::io::Write;
     use std::sync::Arc;
-    use try_from_iterator::TryFromIterator as _;
+    use try_from_iterator::TryFromIterator;
     use types::{
         bellatrix::containers::{
             BeaconBlock as BellatrixBeaconBlock, BeaconBlockBody as BellatrixBeaconBlockBody,
@@ -855,6 +855,7 @@ mod tests {
         combined::SignedBeaconBlock,
         config::Config,
         deneb::containers::BlobIdentifier,
+        eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns},
         phase0::primitives::{ForkDigest, H256},
         preset::Mainnet,
     };
@@ -875,6 +876,10 @@ mod tests {
 
     fn empty_blob_sidecar<P: Preset>() -> Arc<BlobSidecar<P>> {
         Arc::new(BlobSidecar::default())
+    }
+
+    fn empty_data_column_sidecar<P: Preset>() -> Arc<DataColumnSidecar<P>> {
+        Arc::new(DataColumnSidecar::default())
     }
 
     /// Merge block with length < max_rpc_size.
@@ -955,6 +960,30 @@ mod tests {
         BlobsByRangeRequest {
             start_slot: 0,
             count: 10,
+        }
+    }
+    fn dcbrange_request() -> DataColumnsByRangeRequest {
+        DataColumnsByRangeRequest {
+            start_slot: 0,
+            count: 10,
+            columns: Arc::new(
+                ContiguousList::<ColumnIndex, NumberOfColumns>::try_from(vec![1, 2, 3])
+                    .expect("Should not exceed maximum number of columns"),
+            ),
+        }
+    }
+    fn dcbroot_request() -> DataColumnsByRootRequest {
+        let data_column_id = DataColumnIdentifier {
+            block_root: H256::zero(),
+            index: 0,
+        };
+
+        DataColumnsByRootRequest {
+            data_column_ids:
+                ContiguousList::<DataColumnIdentifier, MaxRequestDataColumnSidecars>::try_from(
+                    vec![data_column_id],
+                )
+                .expect("Should not exceed maximum length"),
         }
     }
 
@@ -1252,6 +1281,34 @@ mod tests {
                 Phase::Deneb,
             ),
             Ok(Some(RPCResponse::BlobsByRoot(empty_blob_sidecar()))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::DataColumnsByRangeV1,
+                RPCCodedResponse::Success(RPCResponse::DataColumnsByRange(
+                    empty_data_column_sidecar()
+                )),
+                Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::DataColumnsByRange(
+                empty_data_column_sidecar()
+            ))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::DataColumnsByRootV1,
+                RPCCodedResponse::Success(RPCResponse::DataColumnsByRoot(
+                    empty_data_column_sidecar()
+                )),
+                Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::DataColumnsByRoot(
+                empty_data_column_sidecar()
+            ))),
         );
     }
 
@@ -1609,6 +1666,8 @@ mod tests {
             OutboundRequest::MetaData(MetadataRequest::new_v1()),
             OutboundRequest::BlobsByRange(blbrange_request()),
             OutboundRequest::BlobsByRoot(blbroot_request()),
+            OutboundRequest::DataColumnsByRange(dcbrange_request()),
+            OutboundRequest::DataColumnsByRoot(dcbroot_request()),
             OutboundRequest::MetaData(MetadataRequest::new_v2()),
         ];
         for req in requests.iter() {

@@ -954,7 +954,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         request: Request,
     ) -> Result<(), (AppReqId, RPCError)> {
         // Check if the peer is connected before sending an RPC request
-        if self.swarm.is_connected(&peer_id) {
+        if !self.swarm.is_connected(&peer_id) {
             return Err((request_id, RPCError::Disconnected));
         }
         self.eth2_rpc_mut().send_request(

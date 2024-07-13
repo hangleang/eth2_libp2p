@@ -423,8 +423,8 @@ impl ProtocolId {
             ),
             Protocol::DataColumnsByRoot => RpcLimits::new(0, MaxRequestDataColumnSidecars::USIZE),
             Protocol::DataColumnsByRange => RpcLimits::new(
-                DataColumnsByRangeRequest::SIZE.get(),
-                DataColumnsByRangeRequest::SIZE.get(),
+                DataColumnsByRangeRequest::ssz_min_len(),
+                DataColumnsByRangeRequest::ssz_max_len(),
             ),
             Protocol::BlobsByRoot => {
                 RpcLimits::new(BLOBS_BY_ROOT_REQUEST_MIN, BLOBS_BY_ROOT_REQUEST_MAX)
