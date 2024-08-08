@@ -435,6 +435,13 @@ impl<P: Preset> Network<P> {
         // sets up the libp2p swarm.
 
         let swarm = {
+            let config = libp2p::swarm::Config::with_executor(Executor(executor))
+                .with_notify_handler_buffer_size(
+                    std::num::NonZeroUsize::new(7).expect("Not zero"),
+                )
+                .with_per_connection_event_buffer_size(4)
+                .with_dial_concurrency_factor(std::num::NonZeroU8::new(1).expect("Not zero"));
+
             let builder = SwarmBuilder::with_existing_identity(local_keypair)
                 .with_tokio()
                 .with_other_transport(|_key| transport)
@@ -446,25 +453,13 @@ impl<P: Preset> Network<P> {
                     .with_bandwidth_metrics(libp2p_registry)
                     .with_behaviour(|_| behaviour)
                     .expect("infalible")
-                    .with_swarm_config(|_| {
-                        libp2p::swarm::Config::with_executor(Executor(executor))
-                            .with_notify_handler_buffer_size(
-                                std::num::NonZeroUsize::new(7).expect("Not zero"),
-                            )
-                            .with_per_connection_event_buffer_size(4)
-                    })
+                    .with_swarm_config(|_| config)
                     .build()
             } else {
                 builder
                     .with_behaviour(|_| behaviour)
                     .expect("infalible")
-                    .with_swarm_config(|_| {
-                        libp2p::swarm::Config::with_executor(Executor(executor))
-                            .with_notify_handler_buffer_size(
-                                std::num::NonZeroUsize::new(7).expect("Not zero"),
-                            )
-                            .with_per_connection_event_buffer_size(4)
-                    })
+                    .with_swarm_config(|_| config)
                     .build()
             }
         };
