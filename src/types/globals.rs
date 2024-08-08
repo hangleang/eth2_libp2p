@@ -2,10 +2,11 @@
 use crate::peer_manager::peerdb::PeerDB;
 use crate::rpc::{MetaData, MetaDataV2};
 use crate::types::{BackFillState, SyncState};
-use crate::EnrExt;
 use crate::{Client, Eth2Enr};
 use crate::{Enr, GossipTopic, Multiaddr, PeerId};
+use crate::{EnrExt, Subnet};
 use ethereum_types::U256;
+use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
 use std::collections::HashSet;
@@ -126,6 +127,33 @@ impl NetworkGlobals {
         eip_7594::get_custody_columns(node_id, custody_subnet_count)
     }
 
+    /// Compute custody data column subnets the node is assigned to custody.
+    pub fn custody_subnets(&self) -> Vec<u64> {
+        let enr = self.local_enr();
+        let node_id = Uint256::from(U256::from(enr.node_id().raw()));
+        let custody_subnet_count = enr.custody_subnet_count();
+        eip_7594::get_custody_subnets(node_id, custody_subnet_count)
+    }
+
+    /// Returns a connected peer that:
+    /// 1. is connected
+    /// 2. assigned to custody the column based on it's `custody_subnet_count` from metadata (WIP)
+    /// 3. has a good score
+    /// 4. subscribed to the specified column - this condition can be removed later, so we can
+    ///    identify and penalise peers that are supposed to custody the column.
+    pub fn custody_peers_for_column(
+        &self,
+        column_index: ColumnIndex,
+    ) -> Vec<PeerId> {
+        self.peers
+            .read()
+            .good_peers_on_subnet(Subnet::DataColumn(
+                misc::compute_subnet_for_data_column_sidecar(column_index),
+            ))
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
     pub fn new_test_globals(trusted_peers: Vec<PeerId>, log: &slog::Logger) -> NetworkGlobals {
         use crate::CombinedKeyExt;
@@ -152,7 +180,7 @@ mod test {
     use typenum::Unsigned as _;
     use types::eip7594::{NumberOfColumns, CUSTODY_REQUIREMENT, DATA_COLUMN_SIDECAR_SUBNET_COUNT};
 
-    use crate::NetworkGlobals;
+    use super::*;
 
     pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
         let decorator = slog_term::TermDecorator::new().build();
