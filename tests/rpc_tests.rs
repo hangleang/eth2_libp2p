@@ -1,6 +1,7 @@
 #![cfg(test)]
 use common::Protocol;
 use eth2_libp2p::rpc::methods::*;
+use eth2_libp2p::service::api_types::AppRequestId;
 use eth2_libp2p::types::ForkContext;
 use eth2_libp2p::{rpc::max_rpc_size, NetworkEvent, ReportSource, Request, Response};
 use slog::{debug, warn, Level};
@@ -126,12 +127,12 @@ async fn test_status_rpc() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, 10, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
                     peer_id: _,
-                    id: 10,
+                    id: AppRequestId::Router,
                     response,
                 } => {
                     // Should receive the RPC response
@@ -215,7 +216,7 @@ async fn test_blocks_by_range_chunked_rpc() {
 
     // keep count of the number of messages received
     let mut messages_received = 0;
-    let request_id = messages_to_send as usize;
+
     // build the sender future
     let sender_future = async {
         loop {
@@ -224,7 +225,7 @@ async fn test_blocks_by_range_chunked_rpc() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, request_id, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
@@ -336,7 +337,7 @@ async fn test_blobs_by_range_chunked_rpc() {
 
     // keep count of the number of messages received
     let mut messages_received = 0;
-    let request_id = messages_to_send as usize;
+
     // build the sender future
     let sender_future = async {
         loop {
@@ -345,7 +346,7 @@ async fn test_blobs_by_range_chunked_rpc() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, request_id, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
@@ -440,7 +441,7 @@ async fn test_blocks_by_range_over_limit() {
 
     let rpc_response_merge_large = Response::BlocksByRange(Some(Arc::new(signed_full_block)));
 
-    let request_id = messages_to_send as usize;
+
     // build the sender future
     let sender_future = async {
         loop {
@@ -449,12 +450,12 @@ async fn test_blocks_by_range_over_limit() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, request_id, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 // The request will fail because the sender will refuse to send anything > MAX_RPC_SIZE
                 NetworkEvent::RPCFailed { id, .. } => {
-                    assert_eq!(id, request_id);
+                    assert!(matches!(id, AppRequestId::Router));
                     return;
                 }
                 _ => {} // Ignore other behaviour events
@@ -526,7 +527,7 @@ async fn blocks_by_range_chunked_rpc_terminates_correctly() {
 
     // keep count of the number of messages received
     let mut messages_received: u64 = 0;
-    let request_id = messages_to_send as usize;
+
     // build the sender future
     let sender_future = async {
         loop {
@@ -535,7 +536,7 @@ async fn blocks_by_range_chunked_rpc_terminates_correctly() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, request_id, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
@@ -658,12 +659,12 @@ async fn test_blocks_by_range_single_empty_rpc() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, 10, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
                     peer_id: _,
-                    id: 10,
+                    id: AppRequestId::Router,
                     response,
                 } => match response {
                     Response::BlocksByRange(Some(_)) => {
@@ -761,6 +762,7 @@ async fn test_blocks_by_root_chunked_rpc() {
 
     // keep count of the number of messages received
     let mut messages_received = 0;
+
     // build the sender future
     let sender_future = async {
         loop {
@@ -769,12 +771,12 @@ async fn test_blocks_by_root_chunked_rpc() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, 6, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
                     peer_id: _,
-                    id: 6,
+                    id: AppRequestId::Router,
                     response,
                 } => match response {
                     Response::BlocksByRoot(Some(_)) => {
@@ -888,12 +890,12 @@ async fn test_blocks_by_root_chunked_rpc_terminates_correctly() {
                     // Send a STATUS message
                     debug!(log, "Sending RPC");
                     sender
-                        .send_request(peer_id, 10, rpc_request.clone())
+                        .send_request(peer_id, AppRequestId::Router, rpc_request.clone())
                         .unwrap();
                 }
                 NetworkEvent::ResponseReceived {
                     peer_id: _,
-                    id: 10,
+                    id: AppRequestId::Router,
                     response,
                 } => {
                     debug!(log, "Sender received a response");
