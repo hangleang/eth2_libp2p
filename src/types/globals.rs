@@ -10,7 +10,7 @@ use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
 use std::collections::HashSet;
-use types::{eip7594::ColumnIndex, phase0::primitives::Epoch};
+use types::{eip7594::ColumnIndex, phase0::primitives::{Epoch, SubnetId}};
 
 pub struct NetworkGlobals {
     /// The current local ENR.
@@ -128,7 +128,7 @@ impl NetworkGlobals {
     }
 
     /// Compute custody data column subnets the node is assigned to custody.
-    pub fn custody_subnets(&self) -> Vec<u64> {
+    pub fn custody_subnets(&self) -> Vec<SubnetId> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         let custody_subnet_count = enr.custody_subnet_count();

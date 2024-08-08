@@ -537,8 +537,10 @@ impl Discovery {
                     .enr_insert(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice())
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
-            // TODO(das) discovery to be implemented at a later phase. Initially we just use a large peer count.
-            Subnet::DataColumn(_) => return Ok(()),
+            // TODO(das) to be implemented. We're not pruning data column peers yet
+            // because data column topics are subscribed as core topics until we
+            // implement recomputing data column subnets.
+            Subnet::DataColumn(_) => {}
         }
 
         // replace the global version
