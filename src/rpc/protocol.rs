@@ -12,7 +12,7 @@ use libp2p::core::{InboundUpgrade, UpgradeInfo};
 use ssz::{ReadError, SszSize as _, SszWrite as _, WriteError};
 use std::io;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use strum::{AsRefStr, Display, EnumString, IntoStaticStr};
 use tokio_io_timeout::TimeoutStream;
@@ -42,17 +42,17 @@ pub const SIGNED_BEACON_BLOCK_DENEB_MAX: usize = 1125899911199676;
 pub const BLOB_SIDECAR_MIN: usize = 131928;
 pub const BLOB_SIDECAR_MAX: usize = 131928;
 
-lazy_static! {
-    static ref DATA_COLUMN_MIN: usize = DataColumnSidecar::<Mainnet>::default()
-        .to_ssz()
-        .expect("default DataColumnSidecar must be available in SSZ")
-        .len();
-    static ref DATA_COLUMN_MAX: usize = DataColumnSidecar::<Mainnet>::full()
-        .to_ssz()
-        .expect("default DataColumnSidecar must be available in SSZ")
-        .len();
-}
 
+pub static DATA_COLUMN_MIN: LazyLock<usize> = LazyLock::new(|| {DataColumnSidecar::<Mainnet>::default()
+    .to_ssz()
+    .expect("default DataColumnSidecar must be available in SSZ")
+    .len()
+});
+pub static DATA_COLUMN_MAX: LazyLock<usize> = LazyLock::new(||{DataColumnSidecar::<Mainnet>::full()
+    .to_ssz()
+    .expect("default DataColumnSidecar must be available in SSZ")
+    .len()
+});
 pub const BLOBS_BY_ROOT_REQUEST_MIN: usize = 0;
 pub const BLOBS_BY_ROOT_REQUEST_MAX: usize = 24576;
 
