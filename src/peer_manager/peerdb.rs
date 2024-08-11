@@ -1,6 +1,7 @@
 use crate::discovery::enr::PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY;
 use crate::discovery::CombinedKey;
 use crate::{metrics, multiaddr::Multiaddr, types::Subnet, Enr, Gossipsub, PeerId};
+use crate::{EnrExt, Eth2Enr};
 use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
@@ -18,6 +19,9 @@ pub mod client;
 pub mod peer_info;
 pub mod score;
 pub mod sync_status;
+use ethereum_types::U256;
+use ssz::Uint256;
+use types::phase0::primitives::SubnetId;
 
 /// Max number of disconnected nodes to remember.
 const MAX_DC_PEERS: usize = 500;
@@ -249,6 +253,23 @@ impl PeerDB {
                     && info.on_subnet_metadata(&subnet)
                     && info.on_subnet_gossipsub(&subnet)
                     && info.is_good_gossipsub_peer()
+            })
+            .map(|(peer_id, _)| peer_id)
+    }
+    pub fn good_custody_subnet_peers(&self, subnet: SubnetId) -> impl Iterator<Item = &PeerId> {
+        self.peers
+            .iter()
+            .filter(move |(_, info)| {
+                // TODO(das): we currently consider peer to be a subnet peer if the peer is *either*
+                // subscribed to the subnet or assigned to the subnet.
+                // The first condition is currently required as we don't have custody count in
+                // metadata implemented yet, and therefore unable to reliably determine custody
+                // subnet count (ENR is not always available).
+                // This condition can be removed later so that we can identify peers that are not
+                // serving custody columns and penalise accordingly.
+                let is_custody_subnet_peer = info.on_subnet_gossipsub(&Subnet::DataColumn(subnet))
+                    || info.is_assigned_to_custody_subnet(&subnet);
+                info.is_connected() && info.is_good_gossipsub_peer() && is_custody_subnet_peer
             })
             .map(|(peer_id, _)| peer_id)
     }
@@ -680,13 +701,10 @@ impl PeerDB {
     }
 
     /// Updates the connection state. MUST ONLY BE USED IN TESTS.
-    pub fn __add_connected_peer_testing_only(
-        &mut self,
-        peer_id: &PeerId,
-        supernode: bool,
-    ) -> Option<BanOperation> {
+    pub fn __add_connected_peer_testing_only(&mut self, supernode: bool) -> PeerId {
         let enr_key = CombinedKey::generate_secp256k1();
         let mut enr = Enr::builder().build(&enr_key).unwrap();
+        let peer_id = enr.peer_id();
         if supernode {
             enr.insert(
                 PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
@@ -696,13 +714,14 @@ impl PeerDB {
             .expect("u64 can be encoded");
         }
         self.update_connection_state(
-            peer_id,
+            &peer_id,
             NewConnectionState::Connected {
                 enr: Some(enr),
                 seen_address: Multiaddr::empty(),
                 direction: ConnectionDirection::Outgoing,
             },
-        )
+        );
+        peer_id
     }
 
     /// The connection state of the peer has been changed. Modify the peer in the db to ensure all
@@ -765,8 +784,17 @@ impl PeerDB {
                     seen_address,
                 },
             ) => {
-                // Update the ENR if one exists
+                // Update the ENR if one exists, and compute the custody subnets
                 if let Some(enr) = enr {
+                    let node_id = Uint256::from(U256::from(enr.node_id().raw()));
+                    let custody_subnet_count = enr.custody_subnet_count();
+                    let custody_subnets =
+                        eip_7594::get_custody_columns(node_id, custody_subnet_count)
+                            .iter()
+                            .map(|&subnet_id| subnet_id.into())
+                            .collect::<HashSet<_>>();
+                    info.set_custody_subnets(custody_subnets);
+
                     info.set_enr(enr);
                 }
 

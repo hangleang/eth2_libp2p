@@ -10,7 +10,10 @@ use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
 use std::collections::HashSet;
-use types::{eip7594::ColumnIndex, phase0::primitives::{Epoch, SubnetId}};
+use types::{
+    eip7594::ColumnIndex,
+    phase0::primitives::{Epoch, SubnetId},
+};
 
 pub struct NetworkGlobals {
     /// The current local ENR.
@@ -132,24 +135,19 @@ impl NetworkGlobals {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         let custody_subnet_count = enr.custody_subnet_count();
-        eip_7594::get_custody_subnets(node_id, custody_subnet_count)
+        eip_7594::get_custody_columns(node_id, custody_subnet_count)
     }
 
     /// Returns a connected peer that:
     /// 1. is connected
-    /// 2. assigned to custody the column based on it's `custody_subnet_count` from metadata (WIP)
+    /// 2. assigned to custody the column based on it's `custody_subnet_count` from ENR or metadata (WIP)
     /// 3. has a good score
     /// 4. subscribed to the specified column - this condition can be removed later, so we can
     ///    identify and penalise peers that are supposed to custody the column.
-    pub fn custody_peers_for_column(
-        &self,
-        column_index: ColumnIndex,
-    ) -> Vec<PeerId> {
+    pub fn custody_peers_for_column(&self, column_index: ColumnIndex) -> Vec<PeerId> {
         self.peers
             .read()
-            .good_peers_on_subnet(Subnet::DataColumn(
-                misc::compute_subnet_for_data_column_sidecar(column_index),
-            ))
+            .good_custody_subnet_peers(column_index)
             .cloned()
             .collect::<Vec<_>>()
     }
