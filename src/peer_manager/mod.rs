@@ -321,6 +321,7 @@ impl PeerManager {
     /// This function decides whether or not to dial these peers.
     pub fn peers_discovered(&mut self, results: HashMap<Enr, Option<Instant>>) {
         let mut to_dial_peers = 0;
+        let results_count = results.len();
         let connected_or_dialing = self.network_globals.connected_or_dialing_peers();
         for (enr, min_ttl) in results {
             // There are two conditions in deciding whether to dial this peer.
@@ -352,8 +353,19 @@ impl PeerManager {
             }
         }
 
-        // Queue another discovery if we need to
-        self.maintain_peer_count(to_dial_peers);
+        // The heartbeat will attempt new discovery queries every N seconds if the node needs more
+        // peers. As an optimization, this function can recursively trigger new discovery queries
+        // immediatelly if we don't fulfill our peers needs after completing a query. This
+        // recursiveness results in an infinite loop in networks where there not enough peers to
+        // reach out target. To prevent the infinite loop, if a query returns no useful peers, we
+        // will cancel the recursiveness and wait for the heartbeat to trigger another query latter.
+        if results_count > 0 && to_dial_peers == 0 {
+            debug!(self.log, "Skipping recursive discovery query after finding no useful results"; "results" => results_count);
+            metrics::inc_counter(&metrics::DISCOVERY_NO_USEFUL_ENRS);
+        } else {
+            // Queue another discovery if we need to
+            self.maintain_peer_count(to_dial_peers);
+        }
     }
 
     /// A STATUS message has been received from a peer. This resets the status timer.
@@ -486,7 +498,7 @@ impl PeerManager {
         let score = self.network_globals.peers.read().score(peer_id);
         debug!(self.log, "RPC Error"; "protocol" => %protocol, "err" => %err, "client" => %client,
             "peer_id" => %peer_id, "score" => %score, "direction" => ?direction);
-        crate::common::metrics::inc_counter_vec(
+        metrics::inc_counter_vec(
             &metrics::TOTAL_RPC_ERRORS_PER_CLIENT,
             &[
                 client.kind.as_ref(),
@@ -2293,6 +2305,7 @@ mod tests {
                 .iter()
                 .filter_map(|p| if p.trusted { Some(p.peer_id) } else { None })
                 .collect();
+            
             // If we have a high percentage of trusted peers, it is very difficult to reason about
             // the expected results of the pruning.
             if trusted_peers.len() > peer_conditions.len() / 3_usize {

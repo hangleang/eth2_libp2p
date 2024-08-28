@@ -63,6 +63,10 @@ lazy_static! {
         "discovery_sessions",
         "The number of active discovery sessions with peers"
     );
+    pub static ref DISCOVERY_NO_USEFUL_ENRS: Result<IntCounter> = try_create_int_counter(
+        "discovery_no_useful_enrs_found",
+        "Total number of counts a query returned no useful ENRs to dial",
+    );
     pub static ref PEERS_PER_CLIENT: Result<IntGaugeVec> = try_create_int_gauge_vec(
         "libp2p_peers_per_client",
         "The connected peers via client implementation",
