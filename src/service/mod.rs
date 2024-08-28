@@ -947,7 +947,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         peer_id: PeerId,
         request_id: AppReqId,
         request: Request,
-    ) -> Result<(), (AppReqtId, RPCError)> {
+    ) -> Result<(), (AppReqId, RPCError)> {
         // Check if the peer is connected before sending an RPC request
         if !self.swarm.is_connected(&peer_id) {
             return Err((request_id, RPCError::Disconnected));
