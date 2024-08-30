@@ -1,6 +1,7 @@
 //! The subnet predicate used for searching for a particular subnet.
 use super::*;
 use ethereum_types::U256;
+use itertools::Itertools;
 use slog::trace;
 use ssz::Uint256;
 
@@ -27,7 +28,7 @@ pub fn subnet_predicate(subnets: Vec<Subnet>, log: &slog::Logger) -> impl Fn(&En
                 .and_then(|bitfield| bitfield.get(subnet_id as usize))
                 .unwrap_or_default(),
             Subnet::DataColumn(s) => {
-                let subnets = eip_7594::get_custody_subnets(
+                let mut subnets = eip_7594::get_custody_subnets(
                     Uint256::from(U256::from(enr.node_id().raw())),
                     custody_subnet_count,
                 );

@@ -4,7 +4,7 @@ use crate::rpc::{MetaData, MetaDataV2};
 use crate::types::{BackFillState, SyncState};
 use crate::{Client, Eth2Enr};
 use crate::{Enr, GossipTopic, Multiaddr, PeerId};
-use crate::{EnrExt, Subnet};
+use crate::EnrExt;
 use ethereum_types::U256;
 use helper_functions::misc;
 use parking_lot::RwLock;
@@ -124,11 +124,11 @@ impl NetworkGlobals {
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         // TODO(das): cache this number at start-up to not make this fallible
         let custody_subnet_count = enr.custody_subnet_count();
-        eip_7594::get_custody_columns(node_id, custody_subnet_count)
+        eip_7594::get_custody_columns(node_id, custody_subnet_count).collect()
     }
 
     /// Compute custody data column subnets the node is assigned to custody.
-    pub fn custody_subnets(&self) -> Vec<SubnetId> {
+    pub fn custody_subnets(&self) -> impl Iterator<Item = SubnetId> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         let custody_subnet_count = enr.custody_subnet_count();
@@ -147,9 +147,7 @@ impl NetworkGlobals {
     ) -> Vec<PeerId> {
         self.peers
             .read()
-            .good_peers_on_subnet(Subnet::DataColumn(
-                misc::compute_subnet_for_data_column_sidecar(column_index),
-            ))
+            .good_custody_subnet_peer(misc::compute_subnet_for_data_column_sidecar(column_index))
             .cloned()
             .collect::<Vec<_>>()
     }
