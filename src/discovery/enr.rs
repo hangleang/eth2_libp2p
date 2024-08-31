@@ -244,7 +244,7 @@ pub fn build_enr(
         &bitfield.to_ssz()?.as_slice(),
     );
 
-    // set the "custody_subnet_count" field on our ENR
+    // set the "csc" field on our ENR
     let custody_subnet_count = if config.subscribe_all_data_column_subnets {
         DATA_COLUMN_SIDECAR_SUBNET_COUNT
     } else {

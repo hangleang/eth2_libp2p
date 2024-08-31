@@ -10,7 +10,7 @@ use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
 use std::collections::HashSet;
-use types::{eip7594::ColumnIndex, phase0::primitives::{Epoch, SubnetId}};
+use types::{eip7594::ColumnIndex, phase0::primitives::SubnetId};
 
 pub struct NetworkGlobals {
     /// The current local ENR.
@@ -119,7 +119,7 @@ impl NetworkGlobals {
     }
 
     /// Compute custody data columns the node is assigned to custody.
-    pub fn custody_columns(&self, _epoch: Epoch) -> Vec<ColumnIndex> {
+    pub fn custody_columns(&self) -> Vec<ColumnIndex> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         // TODO(das): cache this number at start-up to not make this fallible
@@ -199,8 +199,7 @@ mod test {
             NumberOfColumns::U64 / DATA_COLUMN_SIDECAR_SUBNET_COUNT * CUSTODY_REQUIREMENT;
 
         let globals = NetworkGlobals::new_test_globals(vec![], &log);
-        let any_epoch = 0;
-        let columns = globals.custody_columns(any_epoch);
+        let columns = globals.custody_columns();
 
         assert_eq!(
             columns.len(),
