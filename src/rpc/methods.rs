@@ -108,6 +108,7 @@ pub struct Ping {
 pub enum MetadataRequest<P: Preset> {
     V1(MetadataRequestV1<P>),
     V2(MetadataRequestV2<P>),
+    V3(MetadataRequestV3<P>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,6 +118,11 @@ pub struct MetadataRequestV1<P: Preset> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MetadataRequestV2<P: Preset> {
+    _phantom_data: PhantomData<P>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MetadataRequestV3<P: Preset> {
     _phantom_data: PhantomData<P>,
 }
 
@@ -132,6 +138,12 @@ impl<P: Preset> MetadataRequest<P> {
             _phantom_data: PhantomData,
         })
     }
+
+    pub fn new_v3() -> Self {
+        Self::V3(MetadataRequestV3 {
+            _phantom_data: PhantomData,
+        })
+    }
 }
 
 /// The METADATA response structure.
@@ -139,6 +151,7 @@ impl<P: Preset> MetadataRequest<P> {
 pub enum MetaData {
     V1(MetaDataV1),
     V2(MetaDataV2),
+    V3(MetaDataV3),
 }
 
 impl MetaData {
@@ -146,6 +159,7 @@ impl MetaData {
         match self {
             Self::V1(meta_data) => meta_data.seq_number,
             Self::V2(meta_data) => meta_data.seq_number,
+            Self::V3(meta_data) => meta_data.seq_number,
         }
     }
 
@@ -153,6 +167,7 @@ impl MetaData {
         match self {
             Self::V1(meta_data) => meta_data.attnets,
             Self::V2(meta_data) => meta_data.attnets,
+            Self::V3(meta_data) => meta_data.attnets,
         }
     }
 
@@ -160,6 +175,14 @@ impl MetaData {
         match self {
             Self::V1(_) => None,
             Self::V2(meta_data) => Some(meta_data.syncnets),
+            Self::V3(meta_data) => Some(meta_data.syncnets),
+        }
+    }
+    
+    pub fn custody_subnet_count(self) -> Option<u64> {
+        match self {
+            Self::V3(meta_data) => Some(meta_data.custody_subnet_count),
+            _ => None,
         }
     }
 
@@ -167,6 +190,7 @@ impl MetaData {
         match self {
             Self::V1(meta_data) => &mut meta_data.seq_number,
             Self::V2(meta_data) => &mut meta_data.seq_number,
+            Self::V3(meta_data) => &mut meta_data.seq_number,
         }
     }
 
@@ -174,6 +198,7 @@ impl MetaData {
         match self {
             Self::V1(meta_data) => &mut meta_data.attnets,
             Self::V2(meta_data) => &mut meta_data.attnets,
+            Self::V3(meta_data) => &mut meta_data.attnets,
         }
     }
 
@@ -181,6 +206,14 @@ impl MetaData {
         match self {
             Self::V1(_) => None,
             Self::V2(meta_data) => Some(&mut meta_data.syncnets),
+            Self::V3(meta_data) => Some(&mut meta_data.syncnets),
+        }
+    }
+
+    pub fn custody_subnet_count_mut(&mut self) -> Option<&mut u64> {
+        match self {
+            Self::V3(meta_data) => Some(&mut meta_data.custody_subnet_count),
+            _ => None,
         }
     }
 }
@@ -207,12 +240,30 @@ pub struct MetaDataV2 {
     pub syncnets: EnrSyncCommitteeBitfield,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Ssz)]
+#[serde(deny_unknown_fields)]
+#[ssz(derive_hash = false)]
+pub struct MetaDataV3 {
+    /// A sequential counter indicating when data gets modified.
+    pub seq_number: u64,
+    /// The persistent attestation subnet bitfield.
+    pub attnets: EnrAttestationBitfield,
+    /// The persistent sync committee bitfield.
+    pub syncnets: EnrSyncCommitteeBitfield,
+    /// The persistent custody subnet count.
+    pub custody_subnet_count: u64,
+}
+
 impl MetaData {
     /// Returns a V1 MetaData response from self.
     pub fn metadata_v1(&self) -> Self {
         match self {
             md @ MetaData::V1(_) => md.clone(),
             MetaData::V2(metadata) => MetaData::V1(MetaDataV1 {
+                seq_number: metadata.seq_number,
+                attnets: metadata.attnets.clone(),
+            }),
+            MetaData::V3(metadata) =>  MetaData::V1(MetaDataV1 {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
             }),
@@ -228,13 +279,38 @@ impl MetaData {
                 syncnets: Default::default(),
             }),
             md @ MetaData::V2(_) => md.clone(),
+            MetaData::V3(metadata) => MetaData::V2(MetaDataV2 {
+                seq_number: metadata.seq_number,
+                attnets: metadata.attnets.clone(),
+                syncnets: metadata.syncnets.clone(),
+            }),
         }
     }
 
+    /// Returns a V3 MetaData response from self by filling unavailable fields with default.
+    pub fn metadata_v3(&self) -> Self {
+        match self {
+            MetaData::V1(metadata) => MetaData::V3(MetaDataV3 {
+                seq_number: metadata.seq_number,
+                attnets: metadata.attnets.clone(),
+                syncnets: Default::default(),
+                custody_subnet_count: Default::default(),
+            }),
+            MetaData::V2(metadata) => MetaData::V3(MetaDataV3 {
+                seq_number: metadata.seq_number,
+                attnets: metadata.attnets.clone(),
+                syncnets: metadata.syncnets.clone(),
+                custody_subnet_count: Default::default(),
+            }),
+            md @ MetaData::V3(_) => md.clone(),
+        }
+    }
+    
     pub fn to_ssz(&self) -> Result<Vec<u8>, WriteError> {
         match self {
             MetaData::V1(md) => md.to_ssz(),
             MetaData::V2(md) => md.to_ssz(),
+            MetaData::V3(md) => md.to_ssz(),
         }
     }
 }

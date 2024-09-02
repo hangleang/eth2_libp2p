@@ -93,6 +93,7 @@ impl<P: Preset> Encoder<RPCCodedResponse<P>> for SSZSnappyInboundCodec<P> {
                         // We always send V2 metadata responses from the behaviour
                         // No change required.
                         SupportedProtocol::MetaDataV2 => res.metadata_v2().to_ssz()?,
+                        SupportedProtocol::MetaDataV3 => res.metadata_v3().to_ssz()?,
                         _ => unreachable!(
                             "We only send metadata responses on negotiating metadata requests"
                         ),
@@ -144,6 +145,9 @@ impl<P: Preset> Decoder for SSZSnappyInboundCodec<P> {
         }
         if self.protocol.versioned_protocol == SupportedProtocol::MetaDataV2 {
             return Ok(Some(InboundRequest::MetaData(MetadataRequest::new_v2())));
+        }
+        if self.protocol.versioned_protocol == SupportedProtocol::MetaDataV3 {
+            return Ok(Some(InboundRequest::MetaData(MetadataRequest::new_v3())));
         }
         let Some(length) = handle_length(&mut self.inner, &mut self.len, src)? else {
             return Ok(None);
@@ -537,6 +541,15 @@ fn handle_rpc_request<P: Preset>(
         }
         // MetaData requests return early from InboundUpgrade and do not reach the decoder.
         // Handle this case just for completeness.
+        SupportedProtocol::MetaDataV3 => {
+            if !decoded_buffer.is_empty() {
+                Err(RPCError::InternalError(
+                    "Metadata requests shouldn't reach decoder",
+                ))
+            } else {
+                Ok(Some(InboundRequest::MetaData(MetadataRequest::new_v3())))
+            }
+        }
         SupportedProtocol::MetaDataV2 => {
             if !decoded_buffer.is_empty() {
                 Err(RPCError::InternalError(
@@ -810,6 +823,9 @@ fn handle_rpc_response<P: Preset>(
                 ),
             )),
         },
+        SupportedProtocol::MetaDataV3 => Ok(Some(RPCResponse::MetaData(MetaData::V3(
+            MetaDataV3::from_ssz_default(decoded_buffer)?,
+        )))),
     }
 }
 
@@ -1021,6 +1037,15 @@ mod tests {
             seq_number: 1,
             attnets: EnrAttestationBitfield::default(),
             syncnets: EnrSyncCommitteeBitfield::default(),
+        })
+    }
+
+    fn metadata_v3() -> MetaData {
+        MetaData::V3(MetaDataV3 {
+            seq_number: 1,
+            attnets: EnrAttestationBitfield::default(),
+            syncnets: EnrSyncCommitteeBitfield::default(),
+            custody_subnet_count: 0,
         })
     }
 
@@ -1310,9 +1335,21 @@ mod tests {
                 empty_data_column_sidecar()
             ))),
         );
+
+        // A MetaDataV3 still encodes as a MetaDataV1 since version is Version::V1
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::MetaDataV1,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v3())),
+                // TODO(feature/das): change to electra once rebase
+                Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::MetaData(metadata()))),
+        );
     }
 
-    // Test RPCResponse encoding/decoding for V1 messages
+    // Test RPCResponse encoding/decoding for V2 messages
     #[test]
     fn test_encode_then_decode_v2() {
         let config = Config::mainnet().rapid_upgrade();
@@ -1460,6 +1497,57 @@ mod tests {
             ),
             Ok(Some(RPCResponse::MetaData(metadata_v2())))
         );
+
+        // A MetaDataV3 still encodes as a MetaDataV2 since version is Version::V2
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::MetaDataV2,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v3())),
+                // TODO(feature/das): change to electra once rebase
+                Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::MetaData(metadata_v2()))),
+        );
+    }
+
+    // Test RPCResponse encoding/decoding for V3 messages
+    #[test]
+    fn test_encode_then_decode_v3() {
+        let config = Config::mainnet().rapid_upgrade();
+
+        // A MetaDataV1 and MetaDataV2 still encodes as a MetaDataV3 since version is Version::V3
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::MetaDataV3,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata())),
+                Phase::Phase0,
+            ),
+            Ok(Some(RPCResponse::MetaData(metadata_v3())))
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::MetaDataV3,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v2())),
+                Phase::Altair,
+            ),
+            Ok(Some(RPCResponse::MetaData(metadata_v3())))
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::MetaDataV3,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v3())),
+                // TODO(feature/das): change to electra once rebase
+                Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::MetaData(metadata_v3()))),
+        );
+
     }
 
     // Test RPCResponse encoding/decoding for V2 messages
@@ -1583,25 +1671,25 @@ mod tests {
         let mut encoded_bytes = BytesMut::new();
         encoded_bytes.extend_from_slice(
             fork_context
-                .to_context_bytes(Phase::Altair)
+                .to_context_bytes(Phase::Deneb)
                 .unwrap()
                 .as_bytes(),
         );
         encoded_bytes.extend_from_slice(
             &encode_response::<Mainnet>(
                 &config,
-                SupportedProtocol::MetaDataV2,
-                RPCCodedResponse::Success(RPCResponse::MetaData(metadata())),
-                Phase::Altair,
+                SupportedProtocol::MetaDataV3,
+                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v2())),
+                Phase::Deneb,
             )
             .unwrap(),
         );
 
         assert!(decode_response::<Mainnet>(
             &config,
-            SupportedProtocol::MetaDataV2,
+            SupportedProtocol::MetaDataV3,
             &mut encoded_bytes,
-            Phase::Altair
+            Phase::Deneb
         )
         .is_err());
 
@@ -1669,6 +1757,7 @@ mod tests {
             OutboundRequest::DataColumnsByRange(dcbrange_request()),
             OutboundRequest::DataColumnsByRoot(dcbroot_request()),
             OutboundRequest::MetaData(MetadataRequest::new_v2()),
+            OutboundRequest::MetaData(MetadataRequest::new_v3()),
         ];
         for req in requests.iter() {
             for fork_name in enum_iterator::all::<Phase>() {

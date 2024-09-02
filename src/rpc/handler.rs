@@ -2,7 +2,7 @@
 #![allow(clippy::cognitive_complexity)]
 
 use super::methods::{GoodbyeReason, RPCCodedResponse, RPCResponseErrorCode};
-use super::outbound::{self, OutboundRequestContainer};
+use super::outbound::OutboundRequestContainer;
 use super::protocol::{InboundOutput, InboundRequest, Protocol, RPCError, RPCProtocol};
 use super::{RPCReceived, RPCSend, ReqId};
 use crate::rpc::outbound::{OutboundFramed, OutboundRequest};

@@ -1154,8 +1154,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
 
     /// Sends a METADATA request to a peer.
     fn send_meta_data_request(&mut self, peer_id: PeerId) {
-        // We always prefer sending V2 requests
-        let event = OutboundRequest::MetaData(MetadataRequest::new_v2());
+        // We always prefer sending V3 requests
+        let event = OutboundRequest::MetaData(MetadataRequest::new_v3());
         self.eth2_rpc_mut()
             .send_request(peer_id, RequestId::Internal, event);
     }
@@ -1170,7 +1170,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let metadata = self.network_globals.local_metadata.read().clone();
         let metadata = match req {
             MetadataRequest::V1(_) => metadata.metadata_v1(),
-            MetadataRequest::V2(_) => metadata,
+            MetadataRequest::V2(_) => metadata.metadata_v2(),
+            MetadataRequest::V3(_) => metadata,
         };
         let event = RPCCodedResponse::Success(RPCResponse::MetaData(metadata));
         self.eth2_rpc_mut().send_response(peer_id, id, event);

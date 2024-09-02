@@ -243,6 +243,7 @@ pub enum SupportedProtocol {
     PingV1,
     MetaDataV1,
     MetaDataV2,
+    MetaDataV3,
     LightClientBootstrapV1,
     LightClientOptimisticUpdateV1,
     LightClientFinalityUpdateV1,
@@ -264,6 +265,7 @@ impl SupportedProtocol {
             SupportedProtocol::PingV1 => "1",
             SupportedProtocol::MetaDataV1 => "1",
             SupportedProtocol::MetaDataV2 => "2",
+            SupportedProtocol::MetaDataV3 => "3",
             SupportedProtocol::LightClientBootstrapV1 => "1",
             SupportedProtocol::LightClientOptimisticUpdateV1 => "1",
             SupportedProtocol::LightClientFinalityUpdateV1 => "1",
@@ -285,6 +287,7 @@ impl SupportedProtocol {
             SupportedProtocol::PingV1 => Protocol::Ping,
             SupportedProtocol::MetaDataV1 => Protocol::MetaData,
             SupportedProtocol::MetaDataV2 => Protocol::MetaData,
+            SupportedProtocol::MetaDataV3 => Protocol::MetaData,
             SupportedProtocol::LightClientBootstrapV1 => Protocol::LightClientBootstrap,
             SupportedProtocol::LightClientOptimisticUpdateV1 => {
                 Protocol::LightClientOptimisticUpdate
@@ -312,6 +315,8 @@ impl SupportedProtocol {
                 ProtocolId::new(SupportedProtocol::BlobsByRangeV1, Encoding::SSZSnappy),
                 ProtocolId::new(SupportedProtocol::DataColumnsByRootV1, Encoding::SSZSnappy),
                 ProtocolId::new(SupportedProtocol::DataColumnsByRangeV1, Encoding::SSZSnappy),
+                // TODO(feature/das): change to electra once rebase
+                ProtocolId::new(SupportedProtocol::MetaDataV3, Encoding::SSZSnappy),
             ]);
         }
         supported
@@ -454,7 +459,7 @@ impl ProtocolId {
             Protocol::DataColumnsByRoot => rpc_data_column_limits::<P>(),
             Protocol::DataColumnsByRange => rpc_data_column_limits::<P>(),
             Protocol::Ping => RpcLimits::new(Ping::SIZE.get(), Ping::SIZE.get()),
-            Protocol::MetaData => RpcLimits::new(MetaDataV1::SIZE.get(), MetaDataV2::SIZE.get()),
+            Protocol::MetaData => RpcLimits::new(MetaDataV1::SIZE.get(), MetaDataV3::SIZE.get()),
             Protocol::LightClientBootstrap => {
                 rpc_light_client_bootstrap_limits_by_fork::<P>(fork_context.current_fork())
             }
@@ -486,6 +491,7 @@ impl ProtocolId {
             | SupportedProtocol::PingV1
             | SupportedProtocol::MetaDataV1
             | SupportedProtocol::MetaDataV2
+            | SupportedProtocol::MetaDataV3
             | SupportedProtocol::GoodbyeV1 => false,
         }
     }
@@ -555,6 +561,9 @@ where
                 }
                 SupportedProtocol::MetaDataV2 => {
                     Ok((InboundRequest::MetaData(MetadataRequest::new_v2()), socket))
+                }
+                SupportedProtocol::MetaDataV3 => {
+                    Ok((InboundRequest::MetaData(MetadataRequest::new_v3()), socket))
                 }
                 SupportedProtocol::LightClientOptimisticUpdateV1 => {
                     Ok((InboundRequest::LightClientOptimisticUpdate, socket))
@@ -640,6 +649,7 @@ impl<P: Preset> InboundRequest<P> {
             InboundRequest::MetaData(req) => match req {
                 MetadataRequest::V1(_) => SupportedProtocol::MetaDataV1,
                 MetadataRequest::V2(_) => SupportedProtocol::MetaDataV2,
+                MetadataRequest::V3(_) => SupportedProtocol::MetaDataV3,
             },
             InboundRequest::LightClientBootstrap(_) => SupportedProtocol::LightClientBootstrapV1,
             InboundRequest::LightClientOptimisticUpdate => {
