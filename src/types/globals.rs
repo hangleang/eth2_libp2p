@@ -118,12 +118,19 @@ impl NetworkGlobals {
         std::mem::replace(&mut *self.sync_state.write(), new_state)
     }
 
+    /// Get custody subnet count from Metadata cache. 
+    /// if not available, get from `csc` field of ENR object instead.
+    pub fn custody_subnet_count(&self, enr: Enr) -> u64 {
+        self.local_metadata.read().custody_subnet_count()
+            .unwrap_or_else(|| enr.custody_subnet_count())
+    }
+
     /// Compute custody data columns the node is assigned to custody.
     pub fn custody_columns(&self) -> Vec<ColumnIndex> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         // TODO(das): cache this number at start-up to not make this fallible
-        let custody_subnet_count = enr.custody_subnet_count();
+        let custody_subnet_count = self.custody_subnet_count(enr);
         eip_7594::get_custody_columns(node_id, custody_subnet_count).collect()
     }
 
@@ -131,7 +138,7 @@ impl NetworkGlobals {
     pub fn custody_subnets(&self) -> impl Iterator<Item = SubnetId> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
-        let custody_subnet_count = enr.custody_subnet_count();
+        let custody_subnet_count = self.custody_subnet_count(enr);
         eip_7594::get_custody_subnets(node_id, custody_subnet_count)
     }
 
