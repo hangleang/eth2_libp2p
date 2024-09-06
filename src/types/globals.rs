@@ -9,6 +9,7 @@ use ethereum_types::U256;
 use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
+use types::eip7594::{DATA_COLUMN_SIDECAR_SUBNET_COUNT, SAMPLES_PER_SLOT};
 use std::collections::HashSet;
 use types::{eip7594::ColumnIndex, phase0::primitives::SubnetId};
 
@@ -171,7 +172,7 @@ impl NetworkGlobals {
                 seq_number: 0,
                 attnets: Default::default(),
                 syncnets: Default::default(),
-                custody_subnet_count: 0,
+                custody_subnet_count: DATA_COLUMN_SIDECAR_SUBNET_COUNT,
             }),
             trusted_peers,
             false,

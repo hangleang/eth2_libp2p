@@ -537,10 +537,8 @@ impl Discovery {
                     .enr_insert(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice())
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
-            // TODO(das) to be implemented. We're not pruning data column peers yet
-            // because data column topics are subscribed as core topics until we
-            // implement recomputing data column subnets.
-            Subnet::DataColumn(_) => {}
+            // Data column subnets are computed from node ID. No subnet bitfield in the ENR.
+            Subnet::DataColumn(_) => return Ok(()),
         }
 
         // replace the global version

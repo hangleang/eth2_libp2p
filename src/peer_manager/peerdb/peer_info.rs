@@ -99,15 +99,7 @@ impl PeerInfo {
                         .syncnets()
                         .map_or(false, |s| s.get(*id as usize).unwrap_or(false))
                 }
-                Subnet::DataColumn(_) => {
-                    // TODO(das): Pending spec PR https://github.com/ethereum/consensus-specs/pull/3821
-                    // We should use MetaDataV3 for peer selection rather than
-                    // looking at subscribed peers (current behavior). Until MetaDataV3 is
-                    // implemented, this is the perhaps the only viable option on the current devnet
-                    // as the peer count is low and it's important to identify supernodes to get a
-                    // good distribution of peers across subnets.
-                    return true;
-                }
+                Subnet::DataColumn(column) => return self.custody_subnets.contains(column)
             }
         }
         false
@@ -216,8 +208,8 @@ impl PeerInfo {
     }
 
     /// Returns if the peer is assigned to a given `SubnetId`.
-    pub fn is_assigned_to_custody_subnet(&self, subnet: &SubnetId) -> bool {
-        self.custody_subnets.contains(subnet)
+    pub fn is_assigned_to_custody_subnet(&self, subnet_id: &SubnetId) -> bool {
+        self.custody_subnets.contains(subnet_id)
     }
 
     /// Returns true if the peer is connected to a long-lived subnet.

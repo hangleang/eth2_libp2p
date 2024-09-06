@@ -28,9 +28,14 @@ pub fn subnet_predicate(subnets: Vec<Subnet>, log: &slog::Logger) -> impl Fn(&En
                 .and_then(|bitfield| bitfield.get(subnet_id as usize))
                 .unwrap_or_default(),
             Subnet::DataColumn(s) => {
-                let mut subnets = eip_7594::get_custody_subnets(
+                let mut subnets = eip_7594::get_custody_columns(
                     Uint256::from(U256::from(enr.node_id().raw())),
                     custody_subnet_count,
+                );
+                trace!(
+                    log_clone, 
+                    "Here is the custody columns";
+                    "custody_columns" => %subnets.join(", ")
                 );
                 subnets.contains(&s)
             }

@@ -272,10 +272,12 @@ impl PeerDB {
                 
                 let is_custody_subnet_peer = 
                     info.on_subnet_gossipsub(&Subnet::DataColumn(subnet_id)) || info.is_assigned_to_custody_subnet(&subnet_id);
-                
+                error!(self.log, "Check is has custody subnet peer"; "subnet_id" => %subnet_id, "is_custody_subnet_peer" => %is_custody_subnet_peer);
+
+                // The custody_subnets hashset can be populated via enr or metadata
                 info.is_connected() 
                     && info.is_good_gossipsub_peer()
-                    && is_custody_subnet_peer
+                    && info.is_assigned_to_custody_subnet(&subnet_id) 
             })
             .map(|(peer_id, _)| peer_id)
     }
@@ -797,10 +799,9 @@ impl PeerDB {
             ) => {
                 // Update the ENR if one exists, and compute the custody subnets
                 if let Some(enr) = enr {
-                    let custody_subnet_count = enr.custody_subnet_count();
                     let custody_subnets = eip_7594::get_custody_subnets(
                         Uint256::from(U256::from(enr.node_id().raw())),
-                        custody_subnet_count,
+                        enr.custody_subnet_count(),
                     )
                     .collect::<HashSet<_>>();
                     info.set_custody_subnets(custody_subnets);
