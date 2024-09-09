@@ -68,7 +68,7 @@ impl Eth2Enr for Enr {
         .and_then(|r|r.ok())
         // If value supplied in ENR is invalid, fallback to `custody_requirement`
         .filter(|csc| csc <= &DATA_COLUMN_SIDECAR_SUBNET_COUNT)
-            .unwrap_or(CUSTODY_REQUIREMENT as u64)
+        .unwrap_or(CUSTODY_REQUIREMENT as u64)
     }
 
     fn eth2(&self) -> Result<EnrForkId, &'static str> {

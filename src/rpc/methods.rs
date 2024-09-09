@@ -13,7 +13,7 @@ use try_from_iterator::TryFromIterator as _;
 use typenum::{Prod, Unsigned, U1024, U128, U256, U768};
 use types::combined::{LightClientFinalityUpdate, LightClientOptimisticUpdate};
 use types::deneb::containers::BlobIdentifier;
-use types::eip7594::DataColumnSidecar;
+use types::eip7594::{DataColumnSidecar, CUSTODY_REQUIREMENT};
 use types::{
     combined::{LightClientBootstrap, SignedBeaconBlock},
     deneb::containers::BlobSidecar,
@@ -294,13 +294,13 @@ impl MetaData {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
                 syncnets: Default::default(),
-                custody_subnet_count: Default::default(),
+                custody_subnet_count: CUSTODY_REQUIREMENT,
             }),
             MetaData::V2(metadata) => MetaData::V3(MetaDataV3 {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
                 syncnets: metadata.syncnets.clone(),
-                custody_subnet_count: Default::default(),
+                custody_subnet_count: CUSTODY_REQUIREMENT,
             }),
             md @ MetaData::V3(_) => md.clone(),
         }
