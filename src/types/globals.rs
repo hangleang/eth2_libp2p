@@ -122,10 +122,8 @@ impl NetworkGlobals {
     /// Get custody subnet count from Metadata cache. 
     /// if not available, get from `csc` field of ENR object instead.
     pub fn custody_subnet_count(&self, enr: Enr) -> u64 {
-        enr.custody_subnet_count()
-        // TODO(feature/das): figure out why custody_subnet_count from metadata is zero
-        // self.local_metadata.read().custody_subnet_count()
-        //    .unwrap_or_else(|| enr.custody_subnet_count())
+        self.local_metadata.read().custody_subnet_count()
+            .unwrap_or_else(|| enr.custody_subnet_count())
     }
 
     /// Compute custody data columns the node is assigned to custody.

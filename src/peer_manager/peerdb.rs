@@ -272,7 +272,6 @@ impl PeerDB {
                 
                 let is_custody_subnet_peer = 
                     info.on_subnet_gossipsub(&Subnet::DataColumn(subnet_id)) || info.is_assigned_to_custody_subnet(&subnet_id);
-                error!(self.log, "Check is has custody subnet peer"; "subnet_id" => %subnet_id, "is_custody_subnet_peer" => %is_custody_subnet_peer);
 
                 // The custody_subnets hashset can be populated via enr or metadata
                 info.is_connected() 

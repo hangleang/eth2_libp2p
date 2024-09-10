@@ -871,7 +871,7 @@ mod tests {
         combined::SignedBeaconBlock,
         config::Config,
         deneb::containers::BlobIdentifier,
-        eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns},
+        eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns, CUSTODY_REQUIREMENT},
         phase0::primitives::{ForkDigest, H256},
         preset::Mainnet,
     };
@@ -1045,7 +1045,7 @@ mod tests {
             seq_number: 1,
             attnets: EnrAttestationBitfield::default(),
             syncnets: EnrSyncCommitteeBitfield::default(),
-            custody_subnet_count: 0,
+            custody_subnet_count: CUSTODY_REQUIREMENT,
         })
     }
 

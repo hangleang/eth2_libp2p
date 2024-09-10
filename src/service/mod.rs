@@ -175,8 +175,9 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 &ctx.enr_fork_id,
                 &log,
             )?;
+            
             // Construct the metadata
-            let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), &log);
+            let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), enr.custody_subnet_count(), &log);
             let globals = NetworkGlobals::new(
                 enr,
                 meta_data,
@@ -1171,7 +1172,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let metadata = match req {
             MetadataRequest::V1(_) => metadata.metadata_v1(),
             MetadataRequest::V2(_) => metadata.metadata_v2(),
-            MetadataRequest::V3(_) => metadata,
+            MetadataRequest::V3(_) => metadata.metadata_v3(),
         };
         let event = RPCCodedResponse::Success(RPCResponse::MetaData(metadata));
         self.eth2_rpc_mut().send_response(peer_id, id, event);
