@@ -90,8 +90,6 @@ impl<P: Preset> Encoder<RPCCodedResponse<P>> for SSZSnappyInboundCodec<P> {
                 {
                     match self.protocol.versioned_protocol {
                         SupportedProtocol::MetaDataV1 => res.metadata_v1().to_ssz()?,
-                        // We always send V2 metadata responses from the behaviour
-                        // No change required.
                         SupportedProtocol::MetaDataV2 => res.metadata_v2().to_ssz()?,
                         SupportedProtocol::MetaDataV3 => res.metadata_v3().to_ssz()?,
                         _ => unreachable!(

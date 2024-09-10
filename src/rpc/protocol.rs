@@ -313,11 +313,15 @@ impl SupportedProtocol {
             supported.extend_from_slice(&[
                 ProtocolId::new(SupportedProtocol::BlobsByRootV1, Encoding::SSZSnappy),
                 ProtocolId::new(SupportedProtocol::BlobsByRangeV1, Encoding::SSZSnappy),
+            ]);
+        }
+        // TODO(feature/das): change to electra once rebase
+        if fork_context.is_eip7594_enabled() {
+            supported.extend_from_slice(&[
                 ProtocolId::new(SupportedProtocol::DataColumnsByRootV1, Encoding::SSZSnappy),
                 ProtocolId::new(SupportedProtocol::DataColumnsByRangeV1, Encoding::SSZSnappy),
-                // TODO(feature/das): change to electra once rebase
                 ProtocolId::new(SupportedProtocol::MetaDataV3, Encoding::SSZSnappy),
-            ]);
+            ])
         }
         supported
     }

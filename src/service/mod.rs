@@ -177,7 +177,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             )?;
             
             // Construct the metadata
-            let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), enr.custody_subnet_count(), &log);
+            let custody_subnet_count = chain_config.is_eip7594_enabled().then(|| enr.custody_subnet_count());
+            let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), custody_subnet_count, &log);
             let globals = NetworkGlobals::new(
                 enr,
                 meta_data,
@@ -1155,8 +1156,15 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
 
     /// Sends a METADATA request to a peer.
     fn send_meta_data_request(&mut self, peer_id: PeerId) {
-        // We always prefer sending V3 requests
-        let event = OutboundRequest::MetaData(MetadataRequest::new_v3());
+        let event = if self.fork_context.is_eip7594_enabled() {
+            // Nodes with higher custody will probably start advertising it
+            // before peerdas is activated
+            OutboundRequest::MetaData(MetadataRequest::new_v3())
+        } else {
+            // We always prefer sending V2 requests
+            OutboundRequest::MetaData(MetadataRequest::new_v2())
+        };
+
         self.eth2_rpc_mut()
             .send_request(peer_id, RequestId::Internal, event);
     }
@@ -1164,16 +1172,16 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     /// Sends a METADATA response to a peer.
     fn send_meta_data_response(
         &mut self,
-        req: MetadataRequest<P>,
+        _req: MetadataRequest<P>,
         id: PeerRequestId,
         peer_id: PeerId,
     ) {
         let metadata = self.network_globals.local_metadata.read().clone();
-        let metadata = match req {
-            MetadataRequest::V1(_) => metadata.metadata_v1(),
-            MetadataRequest::V2(_) => metadata.metadata_v2(),
-            MetadataRequest::V3(_) => metadata.metadata_v3(),
-        };
+        // let metadata = match req {
+        //    MetadataRequest::V1(_) => metadata.metadata_v1(),
+        //    MetadataRequest::V2(_) => metadata.metadata_v2(),
+        //    MetadataRequest::V3(_) => metadata.metadata_v3(),
+        // };
         let event = RPCCodedResponse::Success(RPCResponse::MetaData(metadata));
         self.eth2_rpc_mut().send_response(peer_id, id, event);
     }

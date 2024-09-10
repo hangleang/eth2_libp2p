@@ -2,6 +2,7 @@
 
 use crate::common::time_cache::LRUTimeCache;
 use crate::discovery::enr_ext::EnrExt;
+use crate::discovery::peer_id_to_node_id;
 use crate::rpc::{GoodbyeReason, MetaData, Protocol, RPCError, RPCResponseErrorCode};
 use crate::service::TARGET_SUBNET_PEERS;
 use crate::{metrics, Gossipsub};
@@ -10,11 +11,14 @@ use crate::{Subnet, SubnetDiscovery};
 use anyhow::Result;
 use delay_map::HashSetDelay;
 use discv5::Enr;
+use ethereum_types::U256;
 use libp2p::identify::Info as IdentifyInfo;
 use peerdb::{BanOperation, BanResult, ScoreUpdateResult};
 use rand::seq::SliceRandom;
 use slog::{debug, error, trace, warn};
 use smallvec::SmallVec;
+use ssz::Uint256;
+use std::collections::HashSet;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -719,6 +723,17 @@ impl PeerManager {
                     "peer_id" => %peer_id, "new_seq_no" => meta_data.seq_number());
             }
             peer_info.set_meta_data(meta_data);
+            
+            if let Some(custody_subnet_count) = meta_data.custody_subnet_count() { 
+                if let Ok(node_id) = peer_id_to_node_id(peer_id) {
+                    let custody_subnets = eip_7594::get_custody_subnets(
+                        Uint256::from(U256::from(node_id.raw())),
+                        custody_subnet_count,
+                    )
+                    .collect::<HashSet<_>>();
+                    peer_info.set_custody_subnets(custody_subnets);
+                }
+            }
         } else {
             error!(self.log, "Received METADATA from an unknown peer";
                 "peer_id" => %peer_id);

@@ -364,7 +364,7 @@ impl PeerInfo {
         self.connection_status = connection_status
     }
 
-    pub(super) fn set_custody_subnets(&mut self, custody_subnets: HashSet<SubnetId>) {
+    pub(in crate::peer_manager) fn set_custody_subnets(&mut self, custody_subnets: HashSet<SubnetId>) {
         self.custody_subnets = custody_subnets
     }
 
