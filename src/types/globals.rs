@@ -9,7 +9,7 @@ use ethereum_types::U256;
 use helper_functions::misc;
 use parking_lot::RwLock;
 use ssz::Uint256;
-use types::eip7594::CUSTODY_REQUIREMENT;
+use types::eip7594::SAMPLES_PER_SLOT;
 use std::collections::HashSet;
 use types::{eip7594::ColumnIndex, phase0::primitives::SubnetId};
 
@@ -119,11 +119,15 @@ impl NetworkGlobals {
         std::mem::replace(&mut *self.sync_state.write(), new_state)
     }
 
-    /// Get custody subnet count from Metadata cache. 
+    /// Get subnet sampling size to custody data column sidecars
+    /// get custody subnet count from Metadata cache. 
     /// if not available, get from `csc` field of ENR object instead.
-    pub fn custody_subnet_count(&self, enr: Enr) -> u64 {
-        self.local_metadata.read().custody_subnet_count()
-            .unwrap_or_else(|| enr.custody_subnet_count())
+    /// then, compare with max(SAMPLES_PER_SLOT, custody_subnet_count)
+    pub fn subnet_sampling_size(&self, enr: Enr) -> u64 {
+        let custody_subnet_count = self.local_metadata.read().custody_subnet_count()
+            .unwrap_or_else(|| enr.custody_subnet_count());
+
+        custody_subnet_count.max(SAMPLES_PER_SLOT)
     }
 
     /// Compute custody data columns the node is assigned to custody.
@@ -131,16 +135,16 @@ impl NetworkGlobals {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
         // TODO(das): cache this number at start-up to not make this fallible
-        let custody_subnet_count = self.custody_subnet_count(enr);
-        eip_7594::get_custody_columns(node_id, custody_subnet_count).collect()
+        let subnet_sampling_size = self.subnet_sampling_size(enr);
+        eip_7594::get_custody_columns(node_id, subnet_sampling_size).collect()
     }
 
     /// Compute custody data column subnets the node is assigned to custody.
     pub fn custody_subnets(&self) -> impl Iterator<Item = SubnetId> {
         let enr = self.local_enr();
         let node_id = Uint256::from(U256::from(enr.node_id().raw()));
-        let custody_subnet_count = self.custody_subnet_count(enr);
-        eip_7594::get_custody_subnets(node_id, custody_subnet_count)
+        let subnet_sampling_size = self.subnet_sampling_size(enr);
+        eip_7594::get_custody_subnets(node_id, subnet_sampling_size)
     }
 
     /// Returns a connected peer that:
@@ -161,7 +165,7 @@ impl NetworkGlobals {
     }
 
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
-    pub fn new_test_globals(trusted_peers: Vec<PeerId>, log: &slog::Logger) -> NetworkGlobals {
+    pub fn new_test_globals(trusted_peers: Vec<PeerId>, custody_subnet_count: u64, log: &slog::Logger) -> NetworkGlobals {
         use crate::CombinedKeyExt;
         let keypair = libp2p::identity::secp256k1::Keypair::generate();
         let enr_key: discv5::enr::CombinedKey = discv5::enr::CombinedKey::from_secp256k1(&keypair);
@@ -172,7 +176,7 @@ impl NetworkGlobals {
                 seq_number: 0,
                 attnets: Default::default(),
                 syncnets: Default::default(),
-                custody_subnet_count: CUSTODY_REQUIREMENT,
+                custody_subnet_count,
             }),
             trusted_peers,
             false,
@@ -204,15 +208,27 @@ mod test {
     #[test]
     fn test_custody_count_default() {
         let log = build_log(slog::Level::Debug, false);
-        let default_custody_requirement_column_count =
-            NumberOfColumns::U64 / DATA_COLUMN_SIDECAR_SUBNET_COUNT * CUSTODY_REQUIREMENT;
+        // let default_custody_requirement_column_count =
+        //    NumberOfColumns::U64 / DATA_COLUMN_SIDECAR_SUBNET_COUNT * CUSTODY_REQUIREMENT;
 
-        let globals = NetworkGlobals::new_test_globals(vec![], &log);
+        let globals = NetworkGlobals::new_test_globals(vec![], CUSTODY_REQUIREMENT, &log);
         let columns = globals.custody_columns();
 
         assert_eq!(
             columns.len(),
-            default_custody_requirement_column_count as usize
+            SAMPLES_PER_SLOT as usize
+        );
+    }
+
+    #[test]
+    fn test_custody_all_columns() {
+        let log = build_log(slog::Level::Debug, false);
+        let globals = NetworkGlobals::new_test_globals(vec![], DATA_COLUMN_SIDECAR_SUBNET_COUNT, &log);
+        let columns = globals.custody_columns();
+
+        assert_eq!(
+            columns.len(),
+            NumberOfColumns::USIZE
         );
     }
 }

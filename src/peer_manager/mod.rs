@@ -1382,6 +1382,7 @@ enum ConnectingType {
 mod tests {
     use super::*;
     use slog::{o, Drain};
+    use types::eip7594::CUSTODY_REQUIREMENT;
 
     pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
         let decorator = slog_term::TermDecorator::new().build();
@@ -1402,7 +1403,7 @@ mod tests {
             ..Default::default()
         };
         let log = build_log(slog::Level::Debug, false);
-        let globals = NetworkGlobals::new_test_globals(vec![], &log);
+        let globals = NetworkGlobals::new_test_globals(vec![], CUSTODY_REQUIREMENT, &log);
         PeerManager::new(config, Arc::new(globals), &log).unwrap()
     }
 
@@ -1416,7 +1417,7 @@ mod tests {
             ..Default::default()
         };
         let log = build_log(slog::Level::Debug, false);
-        let globals = NetworkGlobals::new_test_globals(trusted_peers, &log);
+        let globals = NetworkGlobals::new_test_globals(trusted_peers, CUSTODY_REQUIREMENT, &log);
         PeerManager::new(config, Arc::new(globals), &log).unwrap()
     }
 
