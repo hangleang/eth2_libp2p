@@ -753,7 +753,10 @@ fn handle_rpc_response<P: Preset>(
                 ),
             )),
         },
-        // MetaData V2 responses have no context bytes, so behave similarly to V1 responses
+        // MetaData V2/V3 responses have no context bytes, so behave similarly to V1 responses
+        SupportedProtocol::MetaDataV3 => Ok(Some(RPCResponse::MetaData(MetaData::V3(
+            MetaDataV3::from_ssz_default(decoded_buffer)?,
+        )))),
         SupportedProtocol::MetaDataV2 => Ok(Some(RPCResponse::MetaData(MetaData::V2(
             MetaDataV2::from_ssz_default(decoded_buffer)?,
         )))),
@@ -821,9 +824,6 @@ fn handle_rpc_response<P: Preset>(
                 ),
             )),
         },
-        SupportedProtocol::MetaDataV3 => Ok(Some(RPCResponse::MetaData(MetaData::V3(
-            MetaDataV3::from_ssz_default(decoded_buffer)?,
-        )))),
     }
 }
 
