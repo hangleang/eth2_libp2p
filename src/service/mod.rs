@@ -253,6 +253,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                 )
             };
 
+            trace!(log, "Using peer score params"; "params" => ?params);
+
             // Set up a scoring update interval
             let update_gossipsub_scores = tokio::time::interval(params.decay_interval);
             let possible_fork_digests = ctx.fork_context.all_fork_digests();
@@ -1144,16 +1146,6 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             .send_request(peer_id, id, OutboundRequest::Ping(ping));
     }
 
-    /// Sends a Pong response to the peer.
-    fn pong(&mut self, id: PeerRequestId, peer_id: PeerId) {
-        let ping = crate::rpc::Ping {
-            data: self.network_globals.local_metadata.read().seq_number(),
-        };
-        trace!(self.log, "Sending Pong"; "request_id" => id.1, "peer_id" => %peer_id);
-        let event = RPCCodedResponse::Success(RPCResponse::Pong(ping));
-        self.eth2_rpc_mut().send_response(peer_id, id, event);
-    }
-
     /// Sends a METADATA request to a peer.
     fn send_meta_data_request(&mut self, peer_id: PeerId) {
         let event = if self.fork_context.is_eip7594_enabled() {
@@ -1172,16 +1164,16 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     /// Sends a METADATA response to a peer.
     fn send_meta_data_response(
         &mut self,
-        _req: MetadataRequest<P>,
+        req: MetadataRequest<P>,
         id: PeerRequestId,
         peer_id: PeerId,
     ) {
         let metadata = self.network_globals.local_metadata.read().clone();
-        // let metadata = match req {
-        //    MetadataRequest::V1(_) => metadata.metadata_v1(),
-        //    MetadataRequest::V2(_) => metadata.metadata_v2(),
-        //    MetadataRequest::V3(_) => metadata.metadata_v3(),
-        // };
+        let metadata = match req {
+            MetadataRequest::V1(_) => metadata.metadata_v1(),
+            MetadataRequest::V2(_) => metadata.metadata_v2(),
+            MetadataRequest::V3(_) => metadata.metadata_v3(),
+        };
         let event = RPCCodedResponse::Success(RPCResponse::MetaData(metadata));
         self.eth2_rpc_mut().send_response(peer_id, id, event);
     }
@@ -1438,10 +1430,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let peer_id = event.peer_id;
 
         // Do not permit Inbound events from peers that are being disconnected, or RPC requests.
-        if !self.peer_manager().is_connected(&peer_id)
-            && (matches!(event.event, HandlerEvent::Err(HandlerErr::Inbound { .. }))
-                || matches!(event.event, HandlerEvent::Ok(RPCReceived::Request(..))))
-        {
+        if !self.peer_manager().is_connected(&peer_id) {
             debug!(
                 self.log,
                 "Ignoring rpc message of disconnecting peer";
@@ -1452,8 +1441,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
 
         let handler_id = event.conn_id;
         // The METADATA and PING RPC responses are handled within the behaviour and not propagated
-        match event.event {
-            HandlerEvent::Err(handler_err) => {
+        match event.message {
+            Err(handler_err) => {
                 match handler_err {
                     HandlerErr::Inbound {
                         id: _,
@@ -1488,15 +1477,13 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     }
                 }
             }
-            HandlerEvent::Ok(RPCReceived::Request(id, request)) => {
+            Ok(RPCReceived::Request(id, request)) => {
                 let peer_request_id = (handler_id, id);
                 match request {
                     /* Behaviour managed protocols: Ping and Metadata */
                     InboundRequest::Ping(ping) => {
                         // inform the peer manager and send the response
                         self.peer_manager_mut().ping_request(&peer_id, ping.data);
-                        // send a ping response
-                        self.pong(peer_request_id, peer_id);
                         None
                     }
                     InboundRequest::MetaData(req) => {
@@ -1619,7 +1606,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     }
                 }
             }
-            HandlerEvent::Ok(RPCReceived::Response(id, resp)) => {
+            Ok(RPCReceived::Response(id, resp)) => {
                 match resp {
                     /* Behaviour managed protocols */
                     RPCResponse::Pong(ping) => {
@@ -1672,7 +1659,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     ),
                 }
             }
-            HandlerEvent::Ok(RPCReceived::EndOfStream(id, termination)) => {
+            Ok(RPCReceived::EndOfStream(id, termination)) => {
                 let response = match termination {
                     ResponseTermination::BlocksByRange => Response::BlocksByRange(None),
                     ResponseTermination::BlocksByRoot => Response::BlocksByRoot(None),
@@ -1682,10 +1669,6 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     ResponseTermination::DataColumnsByRange => Response::DataColumnsByRange(None),
                 };
                 self.build_response(id, peer_id, response)
-            }
-            HandlerEvent::Close(_) => {
-                // NOTE: This is handled in the RPC behaviour.
-                None
             }
         }
     }

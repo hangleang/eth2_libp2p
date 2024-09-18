@@ -300,27 +300,37 @@ impl SupportedProtocol {
         let mut supported = vec![
             ProtocolId::new(Self::StatusV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::GoodbyeV1, Encoding::SSZSnappy),
-            // V2 variants have higher preference then V1
             ProtocolId::new(Self::BlocksByRangeV2, Encoding::SSZSnappy),
             ProtocolId::new(Self::BlocksByRangeV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::BlocksByRootV2, Encoding::SSZSnappy),
             ProtocolId::new(Self::BlocksByRootV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::PingV1, Encoding::SSZSnappy),
-            ProtocolId::new(Self::MetaDataV2, Encoding::SSZSnappy),
-            ProtocolId::new(Self::MetaDataV1, Encoding::SSZSnappy),
         ];
+        // metadata protocol negotiation, the `MetaDataV3` has higher preference.
+        if fork_context.is_eip7594_enabled() {
+            supported.extend_from_slice(&[
+                ProtocolId::new(Self::MetaDataV3, Encoding::SSZSnappy),
+                ProtocolId::new(Self::MetaDataV2, Encoding::SSZSnappy),
+                ProtocolId::new(Self::MetaDataV1, Encoding::SSZSnappy),
+            ])
+        } else {
+            supported.extend_from_slice(&[
+                ProtocolId::new(Self::MetaDataV2, Encoding::SSZSnappy),
+                ProtocolId::new(Self::MetaDataV1, Encoding::SSZSnappy),
+            ])
+        }
+
         if fork_context.fork_exists(Phase::Deneb) {
             supported.extend_from_slice(&[
-                ProtocolId::new(SupportedProtocol::BlobsByRootV1, Encoding::SSZSnappy),
-                ProtocolId::new(SupportedProtocol::BlobsByRangeV1, Encoding::SSZSnappy),
+                ProtocolId::new(Self::BlobsByRootV1, Encoding::SSZSnappy),
+                ProtocolId::new(Self::BlobsByRangeV1, Encoding::SSZSnappy),
             ]);
         }
         // TODO(feature/das): change to electra once rebase
         if fork_context.is_eip7594_enabled() {
             supported.extend_from_slice(&[
-                ProtocolId::new(SupportedProtocol::DataColumnsByRootV1, Encoding::SSZSnappy),
-                ProtocolId::new(SupportedProtocol::DataColumnsByRangeV1, Encoding::SSZSnappy),
-                ProtocolId::new(SupportedProtocol::MetaDataV3, Encoding::SSZSnappy),
+                ProtocolId::new(Self::DataColumnsByRootV1, Encoding::SSZSnappy),
+                ProtocolId::new(Self::DataColumnsByRangeV1, Encoding::SSZSnappy),
             ])
         }
         supported
