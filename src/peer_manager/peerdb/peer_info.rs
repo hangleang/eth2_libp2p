@@ -99,7 +99,7 @@ impl PeerInfo {
                         .syncnets()
                         .map_or(false, |s| s.get(*id as usize).unwrap_or(false))
                 }
-                Subnet::DataColumn(column) => return self.custody_subnets.contains(column)
+                Subnet::DataColumn(subnet_id) => return self.custody_subnets.contains(subnet_id)
             }
         }
         false

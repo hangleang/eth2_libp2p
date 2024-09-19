@@ -1169,11 +1169,6 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         peer_id: PeerId,
     ) {
         let metadata = self.network_globals.local_metadata.read().clone();
-        let metadata = match req {
-            MetadataRequest::V1(_) => metadata.metadata_v1(),
-            MetadataRequest::V2(_) => metadata.metadata_v2(),
-            MetadataRequest::V3(_) => metadata.metadata_v3(),
-        };
         let event = RPCCodedResponse::Success(RPCResponse::MetaData(metadata));
         self.eth2_rpc_mut().send_response(peer_id, id, event);
     }

@@ -172,22 +172,13 @@ pub fn strip_peer_id(addr: &mut Multiaddr) {
 
 /// [Modified in feature/das] Load metadata from persisted file. Return default metadata if loading fails.
 pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: Option<u64>, log: &slog::Logger) -> MetaData {
-    // We load a V3 metadata version by default (regardless of current fork)
-    // since a V3 metadata can be converted to V2 and so forth. The RPC encoder is responsible
+    // We load a V2 metadata version by default (regardless of current fork)
+    // since a V2 metadata can be converted to V1. The RPC encoder is responsible
     // for sending the correct metadata version based on the negotiated protocol version.
-    let mut meta_data = if let Some(custody_subnet_count) = custody_subnet_count {
-        MetaData::V3(MetaDataV3 {
-            seq_number: 0,
-            attnets: EnrAttestationBitfield::default(),
-            syncnets: EnrSyncCommitteeBitfield::default(),
-            custody_subnet_count,
-        })
-    } else {
-        MetaData::V2(MetaDataV2 {
-            seq_number: 0,
-            attnets: EnrAttestationBitfield::default(),
-            syncnets: EnrSyncCommitteeBitfield::default(),
-        })
+    let mut meta_data = MetaDataV2 {
+        seq_number: 0,
+        attnets: EnrAttestationBitfield::default(),
+        syncnets: EnrSyncCommitteeBitfield::default(),
     };
 
     // Read metadata from persisted file if available
@@ -196,47 +187,33 @@ pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: 
         if let Ok(mut metadata_file) = File::open(metadata_path) {
             let mut metadata_ssz = Vec::new();
             if metadata_file.read_to_end(&mut metadata_ssz).is_ok() {
-                // Attempt to read a MetaDataV3 version from the persisted file,
-                // if that fails, read MetaDataV2, and so forth
-                match MetaDataV3::from_ssz_default(&metadata_ssz) {
+                // Attempt to read a MetaDataV2 version from the persisted file,
+                // if that fails, read MetaDataV1                
+                match MetaDataV2::from_ssz_default(&metadata_ssz) {
                     Ok(persisted_metadata) => {
-                        *meta_data.seq_number_mut() = persisted_metadata.seq_number;
+                        meta_data.seq_number = persisted_metadata.seq_number;
                         // Increment seq number if persisted attnet is not default
-                        if persisted_metadata.attnets != meta_data.attnets()
-                            || Some(persisted_metadata.syncnets) != meta_data.syncnets()
+                        if persisted_metadata.attnets != meta_data.attnets
+                            || persisted_metadata.syncnets != meta_data.syncnets
                         {
-                            *meta_data.seq_number_mut() += 1;
+                            meta_data.seq_number += 1;
                         }
-                        meta_data.custody_subnet_count_mut()
-                            .map(|custody_subnet_count_mut| *custody_subnet_count_mut = persisted_metadata.custody_subnet_count);
-                        debug!(log, "Loaded MetaDataV3 from disk");
-                    },
-                    Err(_) => match MetaDataV2::from_ssz_default(&metadata_ssz) {
-                        Ok(persisted_metadata) => {
-                            *meta_data.seq_number_mut() = persisted_metadata.seq_number;
-                            // Increment seq number if persisted attnet is not default
-                            if persisted_metadata.attnets != meta_data.attnets()
-                                || Some(persisted_metadata.syncnets) != meta_data.syncnets()
-                            {
-                                *meta_data.seq_number_mut() += 1;
+                        debug!(log, "Loaded MetaDataV2 from disk");
+                    }
+                    Err(_) => {
+                        match MetaDataV1::from_ssz_default(&metadata_ssz) {
+                            Ok(persisted_metadata) => {
+                                let persisted_metadata = MetaData::V1(persisted_metadata);
+                                // Increment seq number as the persisted metadata version is updated
+                                meta_data.seq_number = persisted_metadata.seq_number() + 1;
+                                debug!(log, "Loaded MetaDataV1 from disk");
                             }
-                            debug!(log, "Loaded MetaDataV2 from disk");
-                        }
-                        Err(_) => {
-                            match MetaDataV1::from_ssz_default(&metadata_ssz) {
-                                Ok(persisted_metadata) => {
-                                    let persisted_metadata = MetaData::V1(persisted_metadata);
-                                    // Increment seq number as the persisted metadata version is updated
-                                    *meta_data.seq_number_mut() = persisted_metadata.seq_number() + 1;
-                                    debug!(log, "Loaded MetaDataV1 from disk");
-                                }
-                                Err(e) => {
-                                    debug!(
-                                        log,
-                                        "Metadata from file could not be decoded";
-                                        "error" => ?e,
-                                    );
-                                }
+                            Err(e) => {
+                                debug!(
+                                    log,
+                                    "Metadata from file could not be decoded";
+                                    "error" => ?e,
+                                );
                             }
                         }
                     }
@@ -244,6 +221,18 @@ pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: 
             }
         };
     }
+
+    // Wrap the MetaData
+    let meta_data = if let Some(custody_subnet_count) = custody_subnet_count {
+        MetaData::V3(MetaDataV3 {
+            attnets: meta_data.attnets,
+            seq_number: meta_data.seq_number,
+            syncnets: meta_data.syncnets,
+            custody_subnet_count,
+        })
+    } else {
+        MetaData::V2(meta_data)
+    };
 
     debug!(log, "Metadata sequence number"; "seq_num" => meta_data.seq_number());
     save_metadata_to_disk(network_dir, meta_data.clone(), log);
