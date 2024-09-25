@@ -11,6 +11,7 @@ pub mod enr_ext;
 use crate::service::TARGET_SUBNET_PEERS;
 use crate::{metrics, ClearDialError};
 use crate::{Enr, NetworkConfig, NetworkGlobals, Subnet, SubnetDiscovery};
+use bytes::Bytes;
 use discv5::{enr::NodeId, Discv5};
 pub use enr::{build_enr, load_enr_from_disk, use_or_load_enr, CombinedKey, Eth2Enr};
 pub use enr_ext::{peer_id_to_node_id, CombinedKeyExt, EnrExt};
@@ -509,9 +510,8 @@ impl Discovery {
                 current_bitfield.set(id, value);
 
                 // insert the bitfield into the ENR record
-                let bitfield_ssz = current_bitfield.to_ssz()?;
                 self.discv5
-                    .enr_insert(ATTESTATION_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice())
+                    .enr_insert::<Bytes>(ATTESTATION_BITFIELD_ENR_KEY, &current_bitfield.to_ssz()?.into())
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
             Subnet::SyncCommittee(id) => {
@@ -533,9 +533,8 @@ impl Discovery {
                 current_bitfield.set(id, value);
 
                 // insert the bitfield into the ENR record
-                let bitfield_ssz = current_bitfield.to_ssz()?;
                 self.discv5
-                    .enr_insert(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice())
+                    .enr_insert::<Bytes>(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &current_bitfield.to_ssz()?.into())
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
             // Data column subnets are computed from node ID. No subnet bitfield in the ENR.
@@ -567,9 +566,8 @@ impl Discovery {
         );
 
         let update = || {
-            let ssz = enr_fork_id.to_ssz()?;
             self.discv5
-                .enr_insert(ETH2_ENR_KEY, &ssz.as_slice())
+                .enr_insert::<Bytes>(ETH2_ENR_KEY, &enr_fork_id.to_ssz()?.into())
                 .map_err(|error| anyhow!("{:?}", error))
         };
 
@@ -1057,10 +1055,7 @@ impl NetworkBehaviour for Discovery {
                             // NOTE: We assume libp2p itself can keep track of IP changes and we do
                             // not inform it about IP changes found via discovery.
                         }
-                        discv5::Event::EnrAdded { .. }
-                        | discv5::Event::TalkRequest(_)
-                        | discv5::Event::NodeInserted { .. }
-                        | discv5::Event::SessionEstablished { .. } => {} // Ignore all other discv5 server events
+                        _ => {} // Ignore all other discv5 server events
                     }
                 }
             }
@@ -1277,7 +1272,7 @@ mod tests {
 
         let bitfield_ssz = bitfield.to_ssz().unwrap();
 
-        builder.add_value(ATTESTATION_BITFIELD_ENR_KEY, &bitfield_ssz.as_slice());
+        builder.add_value::<Bytes>(ATTESTATION_BITFIELD_ENR_KEY, &bitfield_ssz.into());
         builder.build(&enr_key).unwrap()
     }
 
