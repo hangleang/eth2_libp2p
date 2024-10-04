@@ -437,11 +437,11 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
             PubsubMessage::VoluntaryExit(_data) => write!(f, "Voluntary Exit"),
             PubsubMessage::ProposerSlashing(_data) => write!(f, "Proposer Slashing"),
             PubsubMessage::AttesterSlashing(_data) => write!(f, "Attester Slashing"),
-            PubsubMessage::SignedContributionAndProof(_) => {
-                write!(f, "Signed Contribution and Proof")
+            PubsubMessage::SignedContributionAndProof(data) => {
+                write!(f, "Signed Contribution and Proof: aggregator_index: {}", data.message.aggregator_index)
             }
             PubsubMessage::SyncCommitteeMessage(data) => {
-                write!(f, "Sync committee message: subnet_id: {}", data.0)
+                write!(f, "Sync committee message: subnet_id: {}, validator_index: {}", data.0, data.1.validator_index)
             }
             PubsubMessage::BlsToExecutionChange(data) => {
                 write!(

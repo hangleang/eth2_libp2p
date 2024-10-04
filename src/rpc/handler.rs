@@ -7,7 +7,6 @@ use super::protocol::{InboundOutput, InboundRequest, Protocol, RPCError, RPCProt
 use super::{RPCReceived, RPCSend, ReqId};
 use crate::rpc::outbound::{OutboundFramed, OutboundRequest};
 use crate::rpc::protocol::InboundFramed;
-use crate::rpc::RPCResponse;
 use crate::types::ForkContext;
 use fnv::FnvHashMap;
 use futures::prelude::*;
@@ -16,8 +15,7 @@ use libp2p::swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p::swarm::{ConnectionId, Stream};
-use libp2p::PeerId;
+use libp2p::swarm::Stream;
 use slog::{crit, debug, trace};
 use smallvec::SmallVec;
 use std::{
@@ -91,12 +89,6 @@ pub struct RPCHandler<Id, P>
 where
     P: Preset,
 {
-    /// This `ConnectionId`.
-    id: ConnectionId,
-
-    /// The matching `PeerId` of this connection.
-    peer_id: PeerId,
-
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<RPCProtocol<P>, ()>,
 
@@ -227,16 +219,12 @@ where
     P: Preset,
 {
     pub fn new(
-        id: ConnectionId,
-        peer_id: PeerId,
         listen_protocol: SubstreamProtocol<RPCProtocol<P>, ()>,
         fork_context: Arc<ForkContext>,
         log: &slog::Logger,
         resp_timeout: Duration,
     ) -> Self {
         RPCHandler {
-            id,
-            peer_id,
             listen_protocol,
             events_out: SmallVec::new(),
             dial_queue: SmallVec::new(),
@@ -902,15 +890,6 @@ where
         // If we received a goodbye, shutdown the connection.
         if let InboundRequest::Goodbye(_) = req {
             self.shutdown(None);
-        }
-
-        // If we received a Ping, we queue a Pong response.
-        if let InboundRequest::Ping(ping) = req {
-            trace!(self.log, "Received Ping, queueing Pong";"connection_id" => %self.id, "peer_id" => %self.peer_id);
-            self.send_response(
-                self.current_inbound_substream_id,
-                RPCCodedResponse::Success(RPCResponse::Pong(ping)),
-            );
         }
 
         self.events_out.push(HandlerEvent::Ok(RPCReceived::Request(

@@ -167,27 +167,26 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             .collect();
 
         // set up a collection of variables accessible outside of the network crate
-        let network_globals = {
-            // Create an ENR or load from disk if appropriate
-            let enr = crate::discovery::enr::build_or_load_enr::<P>(
-                local_keypair.clone(),
-                &config,
-                &ctx.enr_fork_id,
-                &log,
-            )?;
-            
-            // Construct the metadata
-            let custody_subnet_count = chain_config.is_eip7594_enabled().then(|| enr.custody_subnet_count());
-            let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), custody_subnet_count, &log);
-            let globals = NetworkGlobals::new(
-                enr,
-                meta_data,
-                trusted_peers,
-                config.disable_peer_scoring,
-                &log,
-            );
-            Arc::new(globals)
-        };
+        // Create an ENR or load from disk if appropriate
+        let enr = crate::discovery::enr::build_or_load_enr::<P>(
+            local_keypair.clone(),
+            &config,
+            &ctx.enr_fork_id,
+            &log,
+        )?;
+        
+        // Construct the metadata
+        let custody_subnet_count = chain_config.is_eip7594_enabled().then(|| enr.custody_subnet_count());
+        let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), custody_subnet_count, &log);
+        let seq_number = meta_data.seq_number();
+        let globals = NetworkGlobals::new(
+            enr,
+            meta_data,
+            trusted_peers,
+            config.disable_peer_scoring,
+            &log,
+        );
+        let network_globals = Arc::new(globals);
 
         // Grab our local ENR FORK ID
         let enr_fork_id = network_globals
@@ -341,6 +340,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             config.outbound_rate_limiter_config.clone(),
             log.clone(),
             network_params,
+            seq_number,
         );
 
         let discovery = {
@@ -1117,33 +1117,28 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             .sync_committee_bitfield()
             .expect("Local discovery must have sync committee bitfield");
 
-        {
-            // write lock scope
-            let mut meta_data = self.network_globals.local_metadata.write();
+        // write lock scope
+        let mut meta_data = self.network_globals.local_metadata.write();
 
-            *meta_data.seq_number_mut() += 1;
-            *meta_data.attnets_mut() = local_attnets;
-            if let Some(syncnets) = meta_data.syncnets_mut() {
-                *syncnets = local_syncnets;
-            }
+        *meta_data.seq_number_mut() += 1;
+        *meta_data.attnets_mut() = local_attnets;
+        if let Some(syncnets) = meta_data.syncnets_mut() {
+            *syncnets = local_syncnets;
         }
-        // Save the updated metadata to disk
-        utils::save_metadata_to_disk(
-            self.network_dir.as_deref(),
-            self.network_globals.local_metadata.read().clone(),
-            &self.log,
-        );
+
+        let seq_number = meta_data.seq_number();
+        let metadata = meta_data.clone();
+
+        drop(meta_data);
+
+        // Update RPC seq_number and save the updated metadata to disk
+        self.eth2_rpc_mut().update_seq_number(seq_number);
+        utils::save_metadata_to_disk(self.network_dir.as_deref(), metadata, &self.log);
     }
 
     /// Sends a Ping request to the peer.
     fn ping(&mut self, peer_id: PeerId) {
-        let ping = crate::rpc::Ping {
-            data: self.network_globals.local_metadata.read().seq_number(),
-        };
-        trace!(self.log, "Sending Ping"; "peer_id" => %peer_id);
-        let id = RequestId::Internal;
-        self.eth2_rpc_mut()
-            .send_request(peer_id, id, OutboundRequest::Ping(ping));
+        self.eth2_rpc_mut().ping(peer_id, RequestId::Internal);
     }
 
     /// Sends a METADATA request to a peer.
@@ -1164,7 +1159,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     /// Sends a METADATA response to a peer.
     fn send_meta_data_response(
         &mut self,
-        req: MetadataRequest<P>,
+        _req: MetadataRequest<P>,
         id: PeerRequestId,
         peer_id: PeerId,
     ) {
@@ -1425,7 +1420,11 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         let peer_id = event.peer_id;
 
         // Do not permit Inbound events from peers that are being disconnected, or RPC requests.
-        if !self.peer_manager().is_connected(&peer_id) {
+        // but allow `RpcFailed` and `HandlerErr::Outbound` to be bubble up to sync for state management.
+        if !self.peer_manager().is_connected(&peer_id)
+            && (matches!(event.message, Err(HandlerErr::Inbound { .. }))
+            || matches!(event.message, Ok(RPCReceived::Request(..))))
+        {
             debug!(
                 self.log,
                 "Ignoring rpc message of disconnecting peer";
