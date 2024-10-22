@@ -149,10 +149,8 @@ impl NetworkGlobals {
 
     /// Returns a connected peer that:
     /// 1. is connected
-    /// 2. assigned to custody the column based on it's `custody_subnet_count` from metadata (WIP)
+    /// 2. assigned to custody the column based on it's `custody_subnet_count` from metadata
     /// 3. has a good score
-    /// 4. subscribed to the specified column - this condition can be removed later, so we can
-    ///    identify and penalise peers that are supposed to custody the column.
     pub fn custody_peers_for_column(
         &self,
         column_index: ColumnIndex,

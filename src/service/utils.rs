@@ -170,7 +170,7 @@ pub fn strip_peer_id(addr: &mut Multiaddr) {
     }
 }
 
-/// [Modified in feature/das] Load metadata from persisted file. Return default metadata if loading fails.
+/// [Modified in eip7594] Load metadata from persisted file. Return default metadata if loading fails.
 pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: Option<u64>, log: &slog::Logger) -> MetaData {
     // We load a V2 metadata version by default (regardless of current fork)
     // since a V2 metadata can be converted to V1. The RPC encoder is responsible
