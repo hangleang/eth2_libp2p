@@ -10,7 +10,6 @@ use crate::{Subnet, SubnetDiscovery};
 use anyhow::Result;
 use delay_map::HashSetDelay;
 use discv5::Enr;
-use ethereum_types::U256;
 use libp2p::identify::Info as IdentifyInfo;
 use peerdb::{BanOperation, BanResult, ScoreUpdateResult};
 use rand::seq::SliceRandom;
@@ -715,8 +714,9 @@ impl PeerManager {
             if let Some(custody_subnet_count) = meta_data.custody_subnet_count() { 
                 if let Ok(node_id) = peer_id_to_node_id(peer_id) {
                     let custody_subnets = eip_7594::get_custody_subnets(
-                        Uint256::from(U256::from(node_id.raw())),
+                        Uint256::from_be_bytes(node_id.raw()),
                         custody_subnet_count,
+                        &self.network_globals.config,
                     )
                     .collect::<HashSet<_>>();
                     peer_info.set_custody_subnets(custody_subnets);
@@ -1368,8 +1368,6 @@ enum ConnectingType {
 
 #[cfg(test)]
 mod tests {
-    use crate::config;
-
     use super::*;
     use slog::{o, Drain};
     use std::sync::Arc;

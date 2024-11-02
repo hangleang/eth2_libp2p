@@ -133,7 +133,7 @@ impl NetworkGlobals {
     /// Get subnet sampling size to custody data column sidecars
     /// get custody subnet count from Metadata cache. 
     /// if not available, get from `csc` field of ENR object instead.
-    /// then, compare with max(SAMPLES_PER_SLOT, custody_subnet_count)
+    /// then, compare with max(config.samples_per_slot, custody_subnet_count)
     pub fn subnet_sampling_size(&self, enr: Enr) -> u64 {
         let custody_subnet_count = self.local_metadata.read().custody_subnet_count()
             .unwrap_or_else(|| enr.custody_subnet_count(&self.config).expect("custody subnet count must be set if PeerDAS is scheduled"));
@@ -147,7 +147,7 @@ impl NetworkGlobals {
         let node_id = Uint256::from_be_bytes(enr.node_id().raw());
         // TODO(das): cache this number at start-up to not make this fallible
         let subnet_sampling_size = self.subnet_sampling_size(enr);
-        eip_7594::get_custody_columns(node_id, subnet_sampling_size).collect_vec()
+        eip_7594::get_custody_columns(node_id, subnet_sampling_size, &self.config).collect_vec()
     }
 
     /// Compute custody data column subnets the node is assigned to custody.
@@ -155,7 +155,7 @@ impl NetworkGlobals {
         let enr = self.local_enr();
         let node_id = Uint256::from_be_bytes(enr.node_id().raw());
         let subnet_sampling_size = self.subnet_sampling_size(enr);
-        eip_7594::get_custody_subnets(node_id, subnet_sampling_size)
+        eip_7594::get_custody_subnets(node_id, subnet_sampling_size, &self.config)
     }
 
     /// Returns a connected peer that:
@@ -168,7 +168,7 @@ impl NetworkGlobals {
     ) -> Vec<PeerId> {
         self.peers
             .read()
-            .good_custody_subnet_peer(misc::compute_subnet_for_data_column_sidecar(column_index))
+            .good_custody_subnet_peer(misc::compute_subnet_for_data_column_sidecar(column_index, &self.config))
             .cloned()
             .collect::<Vec<_>>()
     }

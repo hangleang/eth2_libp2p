@@ -1,13 +1,12 @@
 use crate::discovery::enr::PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY;
 use crate::discovery::CombinedKey;
-use crate::{EnrExt, Eth2Enr};
+use crate::EnrExt;
 use crate::{metrics, multiaddr::Multiaddr, types::Subnet, Enr, Gossipsub, PeerId};
-use ethereum_types::U256;
 use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
-use ssz::Uint256;
+use types::config::Config;
 use types::phase0::primitives::SubnetId;
 use std::net::IpAddr;
 use std::time::Instant;
@@ -17,7 +16,6 @@ use std::{
     fmt::Formatter,
 };
 use sync_status::SyncStatus;
-use types::eip7594::DATA_COLUMN_SIDECAR_SUBNET_COUNT;
 pub mod client;
 pub mod peer_info;
 pub mod score;
@@ -700,6 +698,7 @@ impl PeerDB {
     pub fn __add_connected_peer_testing_only(
         &mut self,
         supernode: bool,
+        config: Config,
     ) -> PeerId {
         let enr_key = CombinedKey::generate_secp256k1();
         let mut enr = Enr::builder().build(&enr_key).unwrap();
@@ -708,7 +707,7 @@ impl PeerDB {
         if supernode {
             enr.insert(
                 PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
-                &(DATA_COLUMN_SIDECAR_SUBNET_COUNT),
+                &config.data_column_sidecar_subnet_count,
                 &enr_key,
             )
             .expect("u64 can be encoded");
@@ -787,12 +786,12 @@ impl PeerDB {
             ) => {
                 // Update the ENR if one exists, and compute the custody subnets
                 if let Some(enr) = enr {
-                    let custody_subnets = eip_7594::get_custody_subnets(
-                        Uint256::from(U256::from(enr.node_id().raw())),
-                        enr.custody_subnet_count(),
-                    )
-                    .collect::<HashSet<_>>();
-                    info.set_custody_subnets(custody_subnets);
+                    //let custody_subnets = eip_7594::get_custody_subnets(
+                    //    Uint256::from_be_bytes(enr.node_id().raw()),
+                    //    enr.custody_subnet_count(),
+                    //)
+                    //.collect::<HashSet<_>>();
+                    //info.set_custody_subnets(custody_subnets);
                     info.set_enr(enr);
                 }
 

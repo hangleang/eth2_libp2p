@@ -157,33 +157,8 @@ impl<Id: ReqId, P: Preset> SelfRateLimiter<Id, P> {
                 entry.remove();
             }
         }
-        // NOTE: There can be entries that have been removed due to peer disconnections, we simply
-        // ignore these messages here.
     }
 
-    /// Informs the limiter that a peer has disconnected. This removes any pending requests and
-    /// returns their IDs.
-    pub fn peer_disconnected(&mut self, peer_id: PeerId) -> Vec<(Id, Protocol)> {
-        // It's not ideal to iterate this map, but the key is (PeerId, Protocol) and this map
-        // should never really be large. So we iterate for simplicity
-        let mut failed_requests = Vec::new();
-        self.delayed_requests
-            .retain(|(map_peer_id, protocol), queue| {
-                if map_peer_id == &peer_id {
-                    // NOTE: Currently cannot remove entries from the DelayQueue, we will just let
-                    // them expire and ignore them.
-                    for message in queue {
-                        failed_requests.push((message.request_id, *protocol))
-                    }
-                    // Remove the entry
-                    false
-                } else {
-                    // Keep the entry
-                    true
-                }
-            });
-        failed_requests
-    }
     // NOTE: There can be entries that have been removed due to peer disconnections, we simply
     // ignore these messages here.
 

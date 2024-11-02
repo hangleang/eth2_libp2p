@@ -92,7 +92,7 @@ impl<P: Preset> Encoder<RPCCodedResponse<P>> for SSZSnappyInboundCodec<P> {
                     match self.protocol.versioned_protocol {
                         SupportedProtocol::MetaDataV1 => res.metadata_v1().to_ssz()?,
                         SupportedProtocol::MetaDataV2 => res.metadata_v2().to_ssz()?,
-                        SupportedProtocol::MetaDataV3 => res.metadata_v3().to_ssz()?,
+                        SupportedProtocol::MetaDataV3 => res.metadata_v3(self.fork_context.chain_config()).to_ssz()?,
                         _ => unreachable!(
                             "We only send metadata responses on negotiating metadata requests"
                         ),
@@ -938,7 +938,7 @@ mod tests {
         combined::SignedBeaconBlock,
         config::Config,
         deneb::containers::BlobIdentifier,
-        eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns, CUSTODY_REQUIREMENT},
+        eip7594::{ColumnIndex, DataColumnIdentifier, NumberOfColumns},
         phase0::primitives::{ForkDigest, H256},
         preset::Mainnet,
     };
@@ -1113,7 +1113,7 @@ mod tests {
             seq_number: 1,
             attnets: EnrAttestationBitfield::default(),
             syncnets: EnrSyncCommitteeBitfield::default(),
-            custody_subnet_count: CUSTODY_REQUIREMENT,
+            custody_subnet_count: 1,
         })
     }
 

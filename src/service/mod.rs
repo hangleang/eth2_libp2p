@@ -46,7 +46,6 @@ use std::time::Duration;
 use types::{
     altair::consts::SyncCommitteeSubnetCount,
     config::Config as ChainConfig,
-    eip7594::DATA_COLUMN_SIDECAR_SUBNET_COUNT,
     nonstandard::Phase,
     phase0::{
         consts::AttestationSubnetCount,
@@ -287,7 +286,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             let max_topics = AttestationSubnetCount::USIZE
                 + SyncCommitteeSubnetCount::USIZE
                 + BlobSidecarSubnetCount::USIZE
-                + DATA_COLUMN_SIDECAR_SUBNET_COUNT as usize
+                + chain_config.data_column_sidecar_subnet_count as usize
                 + BASE_CORE_TOPICS.len()
                 + ALTAIR_CORE_TOPICS.len()
                 + CAPELLA_CORE_TOPICS.len()
@@ -300,7 +299,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     AttestationSubnetCount::U64,
                     SyncCommitteeSubnetCount::U64,
                     BlobSidecarSubnetCount::U64,
-                    DATA_COLUMN_SIDECAR_SUBNET_COUNT,
+                    chain_config.data_column_sidecar_subnet_count,
                 ),
                 // during a fork we subscribe to both the old and new topics
                 max_subscribed_topics: max_topics * 4,

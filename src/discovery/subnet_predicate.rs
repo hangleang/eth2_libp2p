@@ -36,6 +36,7 @@ pub fn subnet_predicate(
                     let mut subnets = eip_7594::get_custody_subnets(
                         Uint256::from_be_bytes(enr.node_id().raw()),
                         csc,
+                        &chain_config,
                     );
 
                     subnets.contains(&s)

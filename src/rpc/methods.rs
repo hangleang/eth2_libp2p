@@ -4,6 +4,7 @@ use anyhow::Result;
 use regex::bytes::Regex;
 use serde::Serialize;
 use ssz::{ContiguousList, ReadError, Size, Ssz, SszRead, SszSize, SszWrite, WriteError};
+use types::config::Config;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -288,19 +289,19 @@ impl MetaData {
     }
 
     /// Returns a V3 MetaData response from self by filling unavailable fields with default.
-    pub fn metadata_v3(&self) -> Self {
+    pub fn metadata_v3(&self, config: &Arc<Config>) -> Self {
         match self {
             MetaData::V1(metadata) => MetaData::V3(MetaDataV3 {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
                 syncnets: Default::default(),
-                custody_subnet_count: CUSTODY_REQUIREMENT,
+                custody_subnet_count: config.custody_requirement,
             }),
             MetaData::V2(metadata) => MetaData::V3(MetaDataV3 {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
                 syncnets: metadata.syncnets.clone(),
-                custody_subnet_count: CUSTODY_REQUIREMENT,
+                custody_subnet_count: config.custody_requirement,
             }),
             md @ MetaData::V3(_) => md.clone(),
         }
