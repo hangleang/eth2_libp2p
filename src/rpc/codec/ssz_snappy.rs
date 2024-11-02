@@ -92,7 +92,9 @@ impl<P: Preset> Encoder<RPCCodedResponse<P>> for SSZSnappyInboundCodec<P> {
                     match self.protocol.versioned_protocol {
                         SupportedProtocol::MetaDataV1 => res.metadata_v1().to_ssz()?,
                         SupportedProtocol::MetaDataV2 => res.metadata_v2().to_ssz()?,
-                        SupportedProtocol::MetaDataV3 => res.metadata_v3(self.fork_context.chain_config()).to_ssz()?,
+                        SupportedProtocol::MetaDataV3 => {
+                            res.metadata_v3(self.fork_context.chain_config()).to_ssz()?
+                        }
                         _ => unreachable!(
                             "We only send metadata responses on negotiating metadata requests"
                         ),
@@ -965,7 +967,9 @@ mod tests {
     }
 
     /// Bellatrix block with length < max_rpc_size.
-    fn bellatrix_block_small<P: Preset>(fork_context: &ForkContext) -> BellatrixSignedBeaconBlock<P> {
+    fn bellatrix_block_small<P: Preset>(
+        fork_context: &ForkContext,
+    ) -> BellatrixSignedBeaconBlock<P> {
         let tx = ByteList::<P::MaxBytesPerTransaction>::from_ssz_default([0; 1024]).unwrap();
         let txs =
             Arc::new(ContiguousList::try_from_iter(std::iter::repeat(tx).take(5000)).unwrap());
@@ -1615,7 +1619,6 @@ mod tests {
             ),
             Ok(Some(RPCResponse::MetaData(metadata_v3()))),
         );
-
     }
 
     // Test RPCResponse encoding/decoding for V2 messages

@@ -71,7 +71,9 @@ impl Eth2Enr for Enr {
             .ok_or("ENR custody subnet count non-existent")?
             .map_err(|_| "Could not decode the ENR custody subnet count")?;
 
-        if csc >= chain_config.data_column_sidecar_subnet_count && csc <= chain_config.custody_requirement {
+        if csc >= chain_config.data_column_sidecar_subnet_count
+            && csc <= chain_config.custody_requirement
+        {
             Ok(csc)
         } else {
             Err("Invalid custody subnet count in ENR")
@@ -251,10 +253,7 @@ pub fn build_enr(
     // set the "syncnets" field on our ENR
     let bitfield = EnrSyncCommitteeBitfield::default();
 
-    builder.add_value::<Bytes>(
-        SYNC_COMMITTEE_BITFIELD_ENR_KEY,
-        &bitfield.to_ssz()?.into(),
-    );
+    builder.add_value::<Bytes>(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield.to_ssz()?.into());
 
     // only set `csc` if PeerDAS fork epoch has been scheduled
     if chain_config.is_eip7594_enabled() {

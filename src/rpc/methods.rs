@@ -4,7 +4,6 @@ use anyhow::Result;
 use regex::bytes::Regex;
 use serde::Serialize;
 use ssz::{ContiguousList, ReadError, Size, Ssz, SszRead, SszSize, SszWrite, WriteError};
-use types::config::Config;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -12,6 +11,7 @@ use std::{ops::Deref, sync::Arc};
 use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
 use typenum::{Prod, Unsigned as _, U1024, U128, U256, U768};
+use types::config::Config;
 use types::{
     combined::{
         LightClientBootstrap, LightClientFinalityUpdate, LightClientOptimisticUpdate,
@@ -179,7 +179,7 @@ impl MetaData {
             Self::V3(meta_data) => Some(meta_data.syncnets),
         }
     }
-    
+
     pub fn custody_subnet_count(self) -> Option<u64> {
         match self {
             Self::V3(meta_data) => Some(meta_data.custody_subnet_count),
@@ -264,7 +264,7 @@ impl MetaData {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
             }),
-            MetaData::V3(metadata) =>  MetaData::V1(MetaDataV1 {
+            MetaData::V3(metadata) => MetaData::V1(MetaDataV1 {
                 seq_number: metadata.seq_number,
                 attnets: metadata.attnets.clone(),
             }),
@@ -306,7 +306,7 @@ impl MetaData {
             md @ MetaData::V3(_) => md.clone(),
         }
     }
-    
+
     pub fn to_ssz(&self) -> Result<Vec<u8>, WriteError> {
         match self {
             MetaData::V1(md) => md.to_ssz(),

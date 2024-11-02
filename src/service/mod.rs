@@ -197,10 +197,17 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             &ctx.enr_fork_id,
             &log,
         )?;
-        
+
         // Construct the metadata
-        let custody_subnet_count = chain_config.is_eip7594_enabled().then(|| enr.custody_subnet_count(&chain_config).expect("invalid custody subnet count in ENR"));
-        let meta_data = utils::load_or_build_metadata(config.network_dir.as_deref(), custody_subnet_count, &log);
+        let custody_subnet_count = chain_config.is_eip7594_enabled().then(|| {
+            enr.custody_subnet_count(&chain_config)
+                .expect("invalid custody subnet count in ENR")
+        });
+        let meta_data = utils::load_or_build_metadata(
+            config.network_dir.as_deref(),
+            custody_subnet_count,
+            &log,
+        );
         let seq_number = meta_data.seq_number();
         let globals = NetworkGlobals::new(
             enr,
@@ -1449,7 +1456,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         // but allow `RpcFailed` and `HandlerErr::Outbound` to be bubble up to sync for state management.
         if !self.peer_manager().is_connected(&peer_id)
             && (matches!(event.message, Err(HandlerErr::Inbound { .. }))
-            || matches!(event.message, Ok(RPCReceived::Request(..))))
+                || matches!(event.message, Ok(RPCReceived::Request(..))))
         {
             debug!(
                 self.log,
@@ -1699,9 +1706,9 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         event: identify::Event,
     ) -> Option<NetworkEvent<AppReqId, P>> {
         match event {
-            identify::Event::Received { 
-                peer_id, 
-                mut info, 
+            identify::Event::Received {
+                peer_id,
+                mut info,
                 connection_id: _,
             } => {
                 if info.listen_addrs.len() > MAX_IDENTIFY_ADDRESSES {

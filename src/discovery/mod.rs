@@ -515,7 +515,10 @@ impl Discovery {
 
                 // insert the bitfield into the ENR record
                 self.discv5
-                    .enr_insert::<Bytes>(ATTESTATION_BITFIELD_ENR_KEY, &current_bitfield.to_ssz()?.into())
+                    .enr_insert::<Bytes>(
+                        ATTESTATION_BITFIELD_ENR_KEY,
+                        &current_bitfield.to_ssz()?.into(),
+                    )
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
             Subnet::SyncCommittee(id) => {
@@ -538,7 +541,10 @@ impl Discovery {
 
                 // insert the bitfield into the ENR record
                 self.discv5
-                    .enr_insert::<Bytes>(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &current_bitfield.to_ssz()?.into())
+                    .enr_insert::<Bytes>(
+                        SYNC_COMMITTEE_BITFIELD_ENR_KEY,
+                        &current_bitfield.to_ssz()?.into(),
+                    )
                     .map_err(|e| anyhow!("{:?}", e))?;
             }
             // Data column subnets are computed from node ID. No subnet bitfield in the ENR.
@@ -1221,7 +1227,7 @@ mod tests {
             }),
             vec![],
             false,
-            3, 
+            3,
             &log,
             chain_config.clone(),
         );

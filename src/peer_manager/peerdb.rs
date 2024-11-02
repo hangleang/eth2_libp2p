@@ -6,8 +6,6 @@ use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
-use types::config::Config;
-use types::phase0::primitives::SubnetId;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
@@ -16,6 +14,8 @@ use std::{
     fmt::Formatter,
 };
 use sync_status::SyncStatus;
+use types::config::Config;
+use types::phase0::primitives::SubnetId;
 pub mod client;
 pub mod peer_info;
 pub mod score;
@@ -261,9 +261,9 @@ impl PeerDB {
             .iter()
             .filter(move |(_, info)| {
                 // The custody_subnets hashset can be populated via enr or metadata
-                info.is_connected() 
+                info.is_connected()
                     && info.is_good_gossipsub_peer()
-                    && info.is_assigned_to_custody_subnet(&subnet_id) 
+                    && info.is_assigned_to_custody_subnet(&subnet_id)
             })
             .map(|(peer_id, _)| peer_id)
     }
@@ -695,15 +695,11 @@ impl PeerDB {
     }
 
     /// Updates the connection state. MUST ONLY BE USED IN TESTS.
-    pub fn __add_connected_peer_testing_only(
-        &mut self,
-        supernode: bool,
-        config: Config,
-    ) -> PeerId {
+    pub fn __add_connected_peer_testing_only(&mut self, supernode: bool, config: Config) -> PeerId {
         let enr_key = CombinedKey::generate_secp256k1();
         let mut enr = Enr::builder().build(&enr_key).unwrap();
         let peer_id = enr.peer_id();
-        
+
         if supernode {
             enr.insert(
                 PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
@@ -712,7 +708,7 @@ impl PeerDB {
             )
             .expect("u64 can be encoded");
         }
-        
+
         self.update_connection_state(
             &peer_id,
             NewConnectionState::Connected {

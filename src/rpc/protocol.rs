@@ -43,16 +43,18 @@ pub const SIGNED_BEACON_BLOCK_ELECTRA_MAX: usize = 1125899911199676;
 pub const BLOB_SIDECAR_MIN: usize = 131928;
 pub const BLOB_SIDECAR_MAX: usize = 131928;
 
-static DATA_COLUMN_MIN: LazyLock<usize> = LazyLock::new(|| DataColumnSidecar::<Mainnet>::default()
-    .to_ssz()
-    .expect("default DataColumnSidecar must be available in SSZ")
-    .len()
-);
-static DATA_COLUMN_MAX: LazyLock<usize> = LazyLock::new(|| DataColumnSidecar::<Mainnet>::full()
-    .to_ssz()
-    .expect("default DataColumnSidecar must be available in SSZ")
-    .len()
-);
+static DATA_COLUMN_MIN: LazyLock<usize> = LazyLock::new(|| {
+    DataColumnSidecar::<Mainnet>::default()
+        .to_ssz()
+        .expect("default DataColumnSidecar must be available in SSZ")
+        .len()
+});
+static DATA_COLUMN_MAX: LazyLock<usize> = LazyLock::new(|| {
+    DataColumnSidecar::<Mainnet>::full()
+        .to_ssz()
+        .expect("default DataColumnSidecar must be available in SSZ")
+        .len()
+});
 
 pub const BLOBS_BY_ROOT_REQUEST_MIN: usize = 0;
 pub const BLOBS_BY_ROOT_REQUEST_MAX: usize = 24576;

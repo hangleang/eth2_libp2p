@@ -338,7 +338,7 @@ async fn test_blobs_by_range_chunked_rpc() {
     // keep count of the number of messages received
     let mut messages_received = 0;
     let request_id = messages_to_send as usize;
-    
+
     // build the sender future
     let sender_future = async {
         loop {

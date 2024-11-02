@@ -710,8 +710,8 @@ impl PeerManager {
                     "peer_id" => %peer_id, "new_seq_no" => meta_data.seq_number());
             }
             peer_info.set_meta_data(meta_data);
-            
-            if let Some(custody_subnet_count) = meta_data.custody_subnet_count() { 
+
+            if let Some(custody_subnet_count) = meta_data.custody_subnet_count() {
                 if let Ok(node_id) = peer_id_to_node_id(peer_id) {
                     let custody_subnets = eip_7594::get_custody_subnets(
                         Uint256::from_be_bytes(node_id.raw()),
@@ -1392,7 +1392,12 @@ mod tests {
         };
         let chain_config = Arc::new(types::config::Config::default());
         let log = build_log(slog::Level::Debug, false);
-        let globals = NetworkGlobals::new_test_globals(vec![], chain_config.custody_requirement, &log, &chain_config);
+        let globals = NetworkGlobals::new_test_globals(
+            vec![],
+            chain_config.custody_requirement,
+            &log,
+            &chain_config,
+        );
         PeerManager::new(config, Arc::new(globals), &log).unwrap()
     }
 
@@ -1407,7 +1412,12 @@ mod tests {
         };
         let chain_config = Arc::new(types::config::Config::default());
         let log = build_log(slog::Level::Debug, false);
-        let globals = NetworkGlobals::new_test_globals(trusted_peers, chain_config.data_column_sidecar_subnet_count, &log, &chain_config);
+        let globals = NetworkGlobals::new_test_globals(
+            trusted_peers,
+            chain_config.data_column_sidecar_subnet_count,
+            &log,
+            &chain_config,
+        );
         PeerManager::new(config, Arc::new(globals), &log).unwrap()
     }
 
@@ -2306,7 +2316,7 @@ mod tests {
                 .iter()
                 .filter_map(|p| if p.trusted { Some(p.peer_id) } else { None })
                 .collect();
-            
+
             // If we have a high percentage of trusted peers, it is very difficult to reason about
             // the expected results of the pruning.
             if trusted_peers.len() > peer_conditions.len() / 3_usize {

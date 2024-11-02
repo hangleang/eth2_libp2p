@@ -192,7 +192,7 @@ impl NetworkBehaviour for PeerManager {
                 "Connection to peer rejected: peer has a bad score",
             ));
         }
-        
+
         // Check the connection limits
         if self.network_globals.connected_or_dialing_peers() >= self.max_peers()
             && self

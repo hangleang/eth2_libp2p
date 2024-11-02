@@ -458,7 +458,7 @@ impl From<RpcOut> for proto::RPC {
                         idontwant: vec![],
                     }),
                 }
-            },
+            }
             RpcOut::IDontWant(IDontWant { message_ids }) => proto::RPC {
                 publish: Vec::new(),
                 subscriptions: Vec::new(),

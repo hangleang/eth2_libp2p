@@ -35,7 +35,11 @@ use hashlink::LinkedHashMap;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use libp2p::core::{multiaddr::Protocol::{Ip4, Ip6}, transport::PortUse, Endpoint, Multiaddr};
+use libp2p::core::{
+    multiaddr::Protocol::{Ip4, Ip6},
+    transport::PortUse,
+    Endpoint, Multiaddr,
+};
 use libp2p::identity::Keypair;
 use libp2p::identity::PeerId;
 use libp2p::swarm::{

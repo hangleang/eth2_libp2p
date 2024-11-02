@@ -9,11 +9,11 @@ use serde::{
     ser::{SerializeStruct, Serializer},
     Serialize,
 };
-use types::phase0::primitives::SubnetId;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use strum::AsRefStr;
+use types::phase0::primitives::SubnetId;
 use PeerConnectionStatus::*;
 
 /// Information about a given connected peer.
@@ -99,7 +99,7 @@ impl PeerInfo {
                         .syncnets()
                         .map_or(false, |s| s.get(*id as usize).unwrap_or(false))
                 }
-                Subnet::DataColumn(subnet_id) => return self.custody_subnets.contains(subnet_id)
+                Subnet::DataColumn(subnet_id) => return self.custody_subnets.contains(subnet_id),
             }
         }
         false
@@ -364,7 +364,10 @@ impl PeerInfo {
         self.connection_status = connection_status
     }
 
-    pub(in crate::peer_manager) fn set_custody_subnets(&mut self, custody_subnets: HashSet<SubnetId>) {
+    pub(in crate::peer_manager) fn set_custody_subnets(
+        &mut self,
+        custody_subnets: HashSet<SubnetId>,
+    ) {
         self.custody_subnets = custody_subnets
     }
 

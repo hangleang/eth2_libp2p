@@ -24,7 +24,9 @@ use types::preset::Preset;
 use crate::types::ForkContext;
 
 pub(crate) use handler::{HandlerErr, HandlerEvent};
-pub(crate) use methods::{MetaData, MetaDataV1, MetaDataV2, MetaDataV3, Ping, RPCCodedResponse, RPCResponse};
+pub(crate) use methods::{
+    MetaData, MetaDataV1, MetaDataV2, MetaDataV3, Ping, RPCCodedResponse, RPCResponse,
+};
 pub(crate) use protocol::InboundRequest;
 
 pub use handler::SubstreamId;
@@ -433,7 +435,7 @@ where
                         })),
                     );
                 }
-                
+
                 // No rate limiting, send the event to the user
                 self.events.push(ToSwarm::GenerateEvent(RPCMessage {
                     peer_id,

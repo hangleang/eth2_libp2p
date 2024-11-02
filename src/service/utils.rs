@@ -180,7 +180,11 @@ pub fn strip_peer_id(addr: &mut Multiaddr) {
 }
 
 /// [Modified in eip7594] Load metadata from persisted file. Return default metadata if loading fails.
-pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: Option<u64>, log: &slog::Logger) -> MetaData {
+pub fn load_or_build_metadata(
+    network_dir: Option<&Path>,
+    custody_subnet_count: Option<u64>,
+    log: &slog::Logger,
+) -> MetaData {
     // We load a V2 metadata version by default (regardless of current fork)
     // since a V2 metadata can be converted to V1. The RPC encoder is responsible
     // for sending the correct metadata version based on the negotiated protocol version.
@@ -197,7 +201,7 @@ pub fn load_or_build_metadata(network_dir: Option<&Path>, custody_subnet_count: 
             let mut metadata_ssz = Vec::new();
             if metadata_file.read_to_end(&mut metadata_ssz).is_ok() {
                 // Attempt to read a MetaDataV2 version from the persisted file,
-                // if that fails, read MetaDataV1                
+                // if that fails, read MetaDataV1
                 match MetaDataV2::from_ssz_default(&metadata_ssz) {
                     Ok(persisted_metadata) => {
                         meta_data.seq_number = persisted_metadata.seq_number;

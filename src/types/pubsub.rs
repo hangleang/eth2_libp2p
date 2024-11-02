@@ -316,7 +316,11 @@ impl<P: Preset> PubsubMessage<P> {
                                 }
                             }
                             Some(
-                                Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Deneb,
+                                Phase::Phase0
+                                | Phase::Altair
+                                | Phase::Bellatrix
+                                | Phase::Capella
+                                | Phase::Deneb,
                             )
                             | None => Err(format!(
                                 "data_column_sidecar topic invalid for given fork digest {:?}",
@@ -548,10 +552,18 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
             PubsubMessage::ProposerSlashing(_data) => write!(f, "Proposer Slashing"),
             PubsubMessage::AttesterSlashing(_data) => write!(f, "Attester Slashing"),
             PubsubMessage::SignedContributionAndProof(data) => {
-                write!(f, "Signed Contribution and Proof: aggregator_index: {}", data.message.aggregator_index)
+                write!(
+                    f,
+                    "Signed Contribution and Proof: aggregator_index: {}",
+                    data.message.aggregator_index
+                )
             }
             PubsubMessage::SyncCommitteeMessage(data) => {
-                write!(f, "Sync committee message: subnet_id: {}, validator_index: {}", data.0, data.1.validator_index)
+                write!(
+                    f,
+                    "Sync committee message: subnet_id: {}, validator_index: {}",
+                    data.0, data.1.validator_index
+                )
             }
             PubsubMessage::BlsToExecutionChange(data) => {
                 write!(
