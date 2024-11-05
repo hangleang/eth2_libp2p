@@ -1022,7 +1022,6 @@ fn test_get_random_peers() {
                 kind: PeerKind::Gossipsubv1_1,
                 connections: vec![ConnectionId::new_unchecked(0)],
                 topics: topics.clone(),
-                dont_send: LinkedHashMap::new(),
                 sender: RpcSender::new(gs.config.connection_handler_queue_len()),
                 dont_send: LinkedHashMap::new(),
             },

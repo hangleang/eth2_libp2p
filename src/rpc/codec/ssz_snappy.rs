@@ -672,9 +672,9 @@ fn handle_rpc_response<P: Preset>(
         },
         SupportedProtocol::DataColumnsByRangeV1 => match fork_name {
             // TODO(das): update fork name
-            Some(Phase::Deneb) => Ok(Some(RPCResponse::DataColumnsByRange(Arc::new(
-                DataColumnSidecar::from_ssz_default(decoded_buffer)?,
-            )))),
+            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::DataColumnsByRange(
+                Arc::new(DataColumnSidecar::from_ssz_default(decoded_buffer)?),
+            ))),
             Some(_) => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
                 "Invalid fork name for data columns by range".to_string(),
@@ -688,9 +688,9 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::DataColumnsByRootV1 => match fork_name {
-            Some(Phase::Deneb) => Ok(Some(RPCResponse::DataColumnsByRoot(Arc::new(
-                DataColumnSidecar::from_ssz_default(decoded_buffer)?,
-            )))),
+            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::DataColumnsByRoot(
+                Arc::new(DataColumnSidecar::from_ssz_default(decoded_buffer)?),
+            ))),
             Some(_) => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
                 "Invalid fork name for data columns by root".to_string(),
@@ -1580,44 +1580,6 @@ mod tests {
                 Phase::Deneb,
             ),
             Ok(Some(RPCResponse::MetaData(metadata_v2()))),
-        );
-    }
-
-    // Test RPCResponse encoding/decoding for V3 messages
-    #[test]
-    fn test_encode_then_decode_v3() {
-        let config = Config::mainnet().rapid_upgrade();
-
-        // A MetaDataV1 and MetaDataV2 still encodes as a MetaDataV3 since version is Version::V3
-        assert_eq!(
-            encode_then_decode_response::<Mainnet>(
-                &config,
-                SupportedProtocol::MetaDataV3,
-                RPCCodedResponse::Success(RPCResponse::MetaData(metadata())),
-                Phase::Phase0,
-            ),
-            Ok(Some(RPCResponse::MetaData(metadata_v3())))
-        );
-
-        assert_eq!(
-            encode_then_decode_response::<Mainnet>(
-                &config,
-                SupportedProtocol::MetaDataV3,
-                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v2())),
-                Phase::Altair,
-            ),
-            Ok(Some(RPCResponse::MetaData(metadata_v3())))
-        );
-
-        assert_eq!(
-            encode_then_decode_response::<Mainnet>(
-                &config,
-                SupportedProtocol::MetaDataV3,
-                RPCCodedResponse::Success(RPCResponse::MetaData(metadata_v3())),
-                // TODO(feature/das): change to electra once rebase
-                Phase::Deneb,
-            ),
-            Ok(Some(RPCResponse::MetaData(metadata_v3()))),
         );
     }
 

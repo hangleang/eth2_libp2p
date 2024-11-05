@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::time::Instant;
 use strum::AsRefStr;
+use types::eip7594::DataColumnSubnetId;
 use types::phase0::primitives::SubnetId;
 use PeerConnectionStatus::*;
 
@@ -43,7 +44,7 @@ pub struct PeerInfo {
     /// is *assigned* to custody, rather than *connected* to (different to `self.subnets`).
     /// Note: Another reason to keep this separate to `self.subnets` is an upcoming change to
     /// decouple custody requirements from the actual subnets, i.e. changing this to `custody_groups`.
-    custody_subnets: HashSet<SubnetId>,
+    custody_subnets: HashSet<DataColumnSubnetId>,
     /// The time we would like to retain this peer. After this time, the peer is no longer
     /// necessary.
     #[serde(skip)]
@@ -366,7 +367,7 @@ impl PeerInfo {
 
     pub(in crate::peer_manager) fn set_custody_subnets(
         &mut self,
-        custody_subnets: HashSet<SubnetId>,
+        custody_subnets: HashSet<DataColumnSubnetId>,
     ) {
         self.custody_subnets = custody_subnets
     }

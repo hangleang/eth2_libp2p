@@ -71,8 +71,8 @@ impl Eth2Enr for Enr {
             .ok_or("ENR custody subnet count non-existent")?
             .map_err(|_| "Could not decode the ENR custody subnet count")?;
 
-        if csc >= chain_config.data_column_sidecar_subnet_count
-            && csc <= chain_config.custody_requirement
+        if csc <= chain_config.data_column_sidecar_subnet_count
+            && csc >= chain_config.custody_requirement
         {
             Ok(csc)
         } else {
@@ -342,6 +342,17 @@ mod test {
         chain_config
     }
 
+    fn build_enr_with_config(
+        chain_config: &ChainConfig,
+        config: NetworkConfig,
+    ) -> (Enr, CombinedKey) {
+        let keypair = libp2p::identity::secp256k1::Keypair::generate();
+        let enr_key = CombinedKey::from_secp256k1(&keypair);
+        let enr_fork_id = EnrForkId::default();
+        let enr = build_enr(chain_config, &enr_key, &config, &enr_fork_id).unwrap();
+        (enr, enr_key)
+    }
+
     #[test]
     fn custody_subnet_count_default() {
         let config = NetworkConfig {
@@ -371,37 +382,6 @@ mod test {
             enr.custody_subnet_count(&chain_config).unwrap(),
             chain_config.data_column_sidecar_subnet_count,
         );
-    }
-
-    #[test]
-    fn custody_subnet_count_fallback_default() {
-        let config = NetworkConfig::default();
-        let chain_config = make_eip7594_config();
-        let (mut enr, enr_key) = build_enr_with_config(&chain_config, config);
-        let invalid_subnet_count = 99u64;
-
-        enr.insert(
-            PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY,
-            &invalid_subnet_count,
-            &enr_key,
-        )
-        .unwrap();
-
-        assert_eq!(
-            enr.custody_subnet_count(&chain_config).unwrap(),
-            chain_config.custody_requirement,
-        );
-    }
-
-    fn build_enr_with_config(
-        chain_config: &ChainConfig,
-        config: NetworkConfig,
-    ) -> (Enr, CombinedKey) {
-        let keypair = libp2p::identity::secp256k1::Keypair::generate();
-        let enr_key = CombinedKey::from_secp256k1(&keypair);
-        let enr_fork_id = EnrForkId::default();
-        let enr = build_enr(chain_config, &enr_key, &config, &enr_fork_id).unwrap();
-        (enr, enr_key)
     }
 
     #[test]

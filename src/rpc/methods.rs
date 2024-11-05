@@ -182,8 +182,9 @@ impl MetaData {
 
     pub fn custody_subnet_count(self) -> Option<u64> {
         match self {
+            Self::V1(_) => None,
+            Self::V2(_) => None,
             Self::V3(meta_data) => Some(meta_data.custody_subnet_count),
-            _ => None,
         }
     }
 
@@ -213,8 +214,9 @@ impl MetaData {
 
     pub fn custody_subnet_count_mut(&mut self) -> Option<&mut u64> {
         match self {
+            Self::V1(_) => None,
+            Self::V2(_) => None,
             Self::V3(meta_data) => Some(&mut meta_data.custody_subnet_count),
-            _ => None,
         }
     }
 }

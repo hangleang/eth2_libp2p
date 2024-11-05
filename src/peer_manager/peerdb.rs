@@ -6,6 +6,7 @@ use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
+use ssz::Uint256;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
@@ -782,12 +783,6 @@ impl PeerDB {
             ) => {
                 // Update the ENR if one exists, and compute the custody subnets
                 if let Some(enr) = enr {
-                    //let custody_subnets = eip_7594::get_custody_subnets(
-                    //    Uint256::from_be_bytes(enr.node_id().raw()),
-                    //    enr.custody_subnet_count(),
-                    //)
-                    //.collect::<HashSet<_>>();
-                    //info.set_custody_subnets(custody_subnets);
                     info.set_enr(enr);
                 }
 

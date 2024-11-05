@@ -719,6 +719,7 @@ impl Discovery {
 
     /// Runs a discovery request for a given group of subnets.
     fn start_subnet_query(&mut self, subnet_queries: Vec<SubnetQuery>) {
+        debug!(self.log, "subnets before filter: {:?}", subnet_queries);
         let mut filtered_subnets: Vec<Subnet> = Vec::new();
 
         // find subnet queries that are still necessary
@@ -759,6 +760,7 @@ impl Discovery {
 
         // Only start a discovery query if we have a subnet to look for.
         if !filtered_subnet_queries.is_empty() {
+            debug!(self.log, "filtered subnets: {filtered_subnet_queries:?}");
             // build the subnet predicate as a combination of the eth2_fork_predicate and the subnet predicate
             let subnet_predicate =
                 subnet_predicate(self.chain_config.clone(), filtered_subnets, &self.log);
@@ -1194,6 +1196,11 @@ impl Discovery {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        rpc::{MetaData, MetaDataV2},
+        types::EnrAttestationBitfield,
+    };
+
     use super::*;
     use libp2p::identity::secp256k1;
     use slog::{o, Drain};

@@ -348,7 +348,7 @@ impl SupportedProtocol {
                 ProtocolId::new(Self::BlobsByRangeV1, Encoding::SSZSnappy),
             ]);
         }
-        // TODO(feature/das): change to electra once rebase
+
         if fork_context.is_eip7594_enabled() {
             supported.extend_from_slice(&[
                 ProtocolId::new(Self::DataColumnsByRootV1, Encoding::SSZSnappy),

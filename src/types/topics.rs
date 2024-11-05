@@ -6,6 +6,7 @@ use typenum::Unsigned as _;
 use types::{
     altair::consts::SyncCommitteeSubnetCount,
     deneb::consts::BlobSidecarSubnetCount,
+    eip7594::DataColumnSubnetId,
     nonstandard::Phase,
     phase0::{
         consts::AttestationSubnetCount,
@@ -121,7 +122,7 @@ pub enum GossipKind {
     /// Topic for publishing BlobSidecars.
     BlobSidecar(u64),
     /// Topic for publishing DataColumnSidecars.
-    DataColumnSidecar(SubnetId),
+    DataColumnSidecar(DataColumnSubnetId),
     /// Topic for publishing raw attestations on a particular subnet.
     #[strum(serialize = "beacon_attestation")]
     Attestation(SubnetId),

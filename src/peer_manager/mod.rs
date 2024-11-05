@@ -21,6 +21,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use types::eip7594::DataColumnSubnetId;
 use types::phase0::primitives::SubnetId;
 
 pub use libp2p::core::Multiaddr;
@@ -693,6 +694,8 @@ impl PeerManager {
 
     /// Received a metadata response from a peer.
     pub fn meta_data_response(&mut self, peer_id: &PeerId, meta_data: MetaData) {
+        let mut invalid_meta_data = false;
+
         if let Some(peer_info) = self.network_globals.peers.write().peer_info_mut(peer_id) {
             if let Some(known_meta_data) = &peer_info.meta_data() {
                 if known_meta_data.seq_number() < meta_data.seq_number() {
@@ -711,20 +714,32 @@ impl PeerManager {
             }
             peer_info.set_meta_data(meta_data);
 
-            if let Some(custody_subnet_count) = meta_data.custody_subnet_count() {
-                if let Ok(node_id) = peer_id_to_node_id(peer_id) {
-                    let custody_subnets = eip_7594::get_custody_subnets(
-                        Uint256::from_be_bytes(node_id.raw()),
-                        custody_subnet_count,
-                        &self.network_globals.config,
-                    )
-                    .collect::<HashSet<_>>();
-                    peer_info.set_custody_subnets(custody_subnets);
+            if self.network_globals.config.is_eip7594_enabled() {
+                // Gracefully ignore metadata/v2 peers. Potentially downscore after PeerDAS to
+                // prioritize PeerDAS peers.
+                if let Some(custody_subnet_count) = meta_data.custody_subnet_count() {
+                    match self.compute_peer_custody_subnets(peer_id, custody_subnet_count) {
+                        Ok(custody_subnets) => peer_info.set_custody_subnets(custody_subnets),
+                        Err(err) => {
+                            debug!(self.log, "Unable to compute peer custody subnets from metadata";
+                                "info" => "Sending goodbye to peer",
+                                "peer_id" => %peer_id,
+                                "custody_subnet_count" => custody_subnet_count,
+                                "error" => ?err,
+                            );
+                            invalid_meta_data = true;
+                        }
+                    }
                 }
             }
         } else {
             error!(self.log, "Received METADATA from an unknown peer";
                 "peer_id" => %peer_id);
+        }
+
+        // Disconnect peers with invalid metadata and find other peers instead.
+        if invalid_meta_data {
+            self.goodbye_peer(peer_id, GoodbyeReason::Fault, ReportSource::PeerManager)
         }
     }
 
@@ -1348,6 +1363,30 @@ impl PeerManager {
                 );
             }
         }
+    }
+
+    fn compute_peer_custody_subnets(
+        &self,
+        peer_id: &PeerId,
+        custody_subnet_count: u64,
+    ) -> Result<HashSet<DataColumnSubnetId>, String> {
+        let node_id = peer_id_to_node_id(peer_id)?;
+        let config = &self.network_globals.config;
+
+        if custody_subnet_count > config.data_column_sidecar_subnet_count()
+            || custody_subnet_count < config.custody_requirement()
+        {
+            return Err("Invalid custody subnet count in metadata: out of range".to_string());
+        }
+
+        let custody_subnets = eip_7594::get_custody_subnets(
+            Uint256::from_be_bytes(node_id.raw()),
+            custody_subnet_count,
+            config,
+        )
+        .collect::<HashSet<_>>();
+
+        Ok(custody_subnets)
     }
 }
 
