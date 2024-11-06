@@ -1,12 +1,14 @@
 use crate::discovery::enr::PEERDAS_CUSTODY_SUBNET_COUNT_ENR_KEY;
-use crate::discovery::CombinedKey;
+use crate::discovery::{peer_id_to_node_id, CombinedKey};
 use crate::EnrExt;
 use crate::{metrics, multiaddr::Multiaddr, types::Subnet, Enr, Gossipsub, PeerId};
 use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use rand::seq::SliceRandom;
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
+use ssz::Uint256;
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
 use std::{
@@ -717,6 +719,25 @@ impl PeerDB {
                 direction: ConnectionDirection::Outgoing,
             },
         );
+
+        if supernode {
+            let peer_info = self.peers.get_mut(&peer_id).expect("peer exists");
+            let all_subnets = (0..config.data_column_sidecar_subnet_count())
+                .map(|csc| csc.into())
+                .collect();
+            peer_info.set_custody_subnets(all_subnets);
+        } else {
+            let peer_info = self.peers.get_mut(&peer_id).expect("peer exists");
+            let node_id = peer_id_to_node_id(&peer_id).expect("convert peer_id to node_id");
+            let subnets =eip_7594::get_custody_subnets(
+                Uint256::from_be_bytes(node_id.raw()),
+                config.custody_requirement(),
+                &Arc::new(config),
+            )
+            .collect::<HashSet<_>>();
+            peer_info.set_custody_subnets(subnets);
+        }
+
         peer_id
     }
 
