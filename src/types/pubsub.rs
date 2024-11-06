@@ -294,7 +294,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::DataColumnSidecar(subnet_id) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Electra) => {
+                            Some(fork) if *fork >= Phase::Deneb => {
                                 let col_sidecar = Arc::new(
                                     DataColumnSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
@@ -315,14 +315,7 @@ impl<P: Preset> PubsubMessage<P> {
                                     ))
                                 }
                             }
-                            Some(
-                                Phase::Phase0
-                                | Phase::Altair
-                                | Phase::Bellatrix
-                                | Phase::Capella
-                                | Phase::Deneb,
-                            )
-                            | None => Err(format!(
+                            Some(_) | None => Err(format!(
                                 "data_column_sidecar topic invalid for given fork digest {:?}",
                                 gossip_topic.fork_digest
                             )),
