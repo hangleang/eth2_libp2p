@@ -639,7 +639,7 @@ fn handle_rpc_response<P: Preset>(
             SignedBeaconBlock::Phase0(Phase0SignedBeaconBlock::from_ssz_default(decoded_buffer)?),
         )))),
         SupportedProtocol::BlobsByRangeV1 => match fork_name {
-            Some(Phase::Deneb) => Ok(Some(RPCResponse::BlobsByRange(Arc::new(
+            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::BlobsByRange(Arc::new(
                 BlobSidecar::from_ssz_default(decoded_buffer)?,
             )))),
             Some(_) => Err(RPCError::ErrorResponse(
@@ -655,7 +655,7 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::BlobsByRootV1 => match fork_name {
-            Some(Phase::Deneb) => Ok(Some(RPCResponse::BlobsByRoot(Arc::new(
+            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::BlobsByRoot(Arc::new(
                 BlobSidecar::from_ssz_default(decoded_buffer)?,
             )))),
             Some(_) => Err(RPCError::ErrorResponse(
@@ -1373,9 +1373,29 @@ mod tests {
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
+                SupportedProtocol::BlobsByRangeV1,
+                RPCCodedResponse::Success(RPCResponse::BlobsByRange(empty_blob_sidecar())),
+                Phase::Electra,
+            ),
+            Ok(Some(RPCResponse::BlobsByRange(empty_blob_sidecar()))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
                 SupportedProtocol::BlobsByRootV1,
                 RPCCodedResponse::Success(RPCResponse::BlobsByRoot(empty_blob_sidecar())),
                 Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::BlobsByRoot(empty_blob_sidecar()))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::BlobsByRootV1,
+                RPCCodedResponse::Success(RPCResponse::BlobsByRoot(empty_blob_sidecar())),
+                Phase::Electra,
             ),
             Ok(Some(RPCResponse::BlobsByRoot(empty_blob_sidecar()))),
         );
@@ -1397,11 +1417,39 @@ mod tests {
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
+                SupportedProtocol::DataColumnsByRangeV1,
+                RPCCodedResponse::Success(RPCResponse::DataColumnsByRange(
+                    empty_data_column_sidecar()
+                )),
+                Phase::Electra,
+            ),
+            Ok(Some(RPCResponse::DataColumnsByRange(
+                empty_data_column_sidecar()
+            ))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
                 SupportedProtocol::DataColumnsByRootV1,
                 RPCCodedResponse::Success(RPCResponse::DataColumnsByRoot(
                     empty_data_column_sidecar()
                 )),
                 Phase::Deneb,
+            ),
+            Ok(Some(RPCResponse::DataColumnsByRoot(
+                empty_data_column_sidecar()
+            ))),
+        );
+
+        assert_eq!(
+            encode_then_decode_response::<Mainnet>(
+                &config,
+                SupportedProtocol::DataColumnsByRootV1,
+                RPCCodedResponse::Success(RPCResponse::DataColumnsByRoot(
+                    empty_data_column_sidecar()
+                )),
+                Phase::Electra,
             ),
             Ok(Some(RPCResponse::DataColumnsByRoot(
                 empty_data_column_sidecar()
