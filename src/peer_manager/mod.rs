@@ -694,7 +694,7 @@ impl PeerManager {
 
     /// Received a metadata response from a peer.
     pub fn meta_data_response(&mut self, peer_id: &PeerId, meta_data: MetaData) {
-        let mut invalid_meta_data = false;
+        // let mut invalid_meta_data = false;
 
         if let Some(peer_info) = self.network_globals.peers.write().peer_info_mut(peer_id) {
             if let Some(known_meta_data) = &peer_info.meta_data() {
@@ -722,12 +722,12 @@ impl PeerManager {
                         Ok(custody_subnets) => peer_info.set_custody_subnets(custody_subnets),
                         Err(err) => {
                             debug!(self.log, "Unable to compute peer custody subnets from metadata";
-                                "info" => "Sending goodbye to peer",
+                                // "info" => "Sending goodbye to peer",
                                 "peer_id" => %peer_id,
                                 "custody_subnet_count" => custody_subnet_count,
                                 "error" => ?err,
                             );
-                            invalid_meta_data = true;
+                            // invalid_meta_data = true;
                         }
                     }
                 }
@@ -738,9 +738,9 @@ impl PeerManager {
         }
 
         // Disconnect peers with invalid metadata and find other peers instead.
-        if invalid_meta_data {
-            self.goodbye_peer(peer_id, GoodbyeReason::Fault, ReportSource::PeerManager)
-        }
+        // if invalid_meta_data {
+        //     self.goodbye_peer(peer_id, GoodbyeReason::Fault, ReportSource::PeerManager)
+        // }
     }
 
     /// Updates the gossipsub scores for all known peers in gossipsub.
