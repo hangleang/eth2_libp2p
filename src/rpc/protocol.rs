@@ -39,6 +39,7 @@ pub const SIGNED_BEACON_BLOCK_CAPELLA_MAX: usize = 1125899911199368;
 pub const SIGNED_BEACON_BLOCK_DENEB_MAX: usize = 1125899911199676;
 // TODO(feature/electra):
 pub const SIGNED_BEACON_BLOCK_ELECTRA_MAX: usize = 1125899911199676;
+pub const SIGNED_BEACON_BLOCK_FULU_MAX: usize = 1125899911199676;
 
 pub const BLOB_SIDECAR_MIN: usize = 131928;
 pub const BLOB_SIDECAR_MAX: usize = 131928;
@@ -80,6 +81,7 @@ pub fn max_rpc_size(fork_context: &ForkContext, max_chunk_size: usize) -> usize 
         Phase::Capella => max_chunk_size,
         Phase::Deneb => max_chunk_size,
         Phase::Electra => max_chunk_size,
+        Phase::Fulu => max_chunk_size,
     }
 }
 
@@ -113,6 +115,10 @@ pub fn rpc_block_limits_by_fork(current_fork: Phase) -> RpcLimits {
             SIGNED_BEACON_BLOCK_PHASE0_MIN, // Base block is smaller than altair and merge blocks
             SIGNED_BEACON_BLOCK_ELECTRA_MAX, // Electra block is larger than Deneb block
         ),
+        Phase::Fulu => RpcLimits::new(
+            SIGNED_BEACON_BLOCK_PHASE0_MIN, // Base block is smaller than altair and merge blocks
+            SIGNED_BEACON_BLOCK_FULU_MAX, // Electra block is larger than Deneb block
+        ),
     }
 }
 
@@ -131,6 +137,10 @@ fn rpc_light_client_finality_update_limits_by_fork<P: Preset>(current_fork: Phas
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
         Phase::Electra => RpcLimits::new(
+            altair_fixed_len,
+            altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
+        ),
+        Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
@@ -155,6 +165,10 @@ fn rpc_light_client_optimistic_update_limits_by_fork<P: Preset>(current_fork: Ph
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
+        Phase::Fulu => RpcLimits::new(
+            altair_fixed_len,
+            altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
+        ),
     }
 }
 
@@ -173,6 +187,10 @@ fn rpc_light_client_bootstrap_limits_by_fork<P: Preset>(current_fork: Phase) -> 
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
         Phase::Electra => RpcLimits::new(
+            altair_fixed_len,
+            altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
+        ),
+        Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),

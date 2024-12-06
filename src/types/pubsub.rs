@@ -26,6 +26,7 @@ use types::{
         SignedAggregateAndProof as ElectraSignedAggregateAndProof,
         SignedBeaconBlock as ElectraBeaconBlock,
     },
+    fulu::containers::SignedBeaconBlock as FuluSignedBeaconBlock,
     nonstandard::Phase,
     phase0::{
         containers::{
@@ -191,7 +192,8 @@ impl<P: Preset> PubsubMessage<P> {
                                     Phase0SignedAggregateAndProof::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
-                                Some(Phase::Electra) => SignedAggregateAndProof::Electra(
+                                Some(Phase::Electra) 
+                                | Some(Phase::Fulu) => SignedAggregateAndProof::Electra(
                                     ElectraSignedAggregateAndProof::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
@@ -218,7 +220,8 @@ impl<P: Preset> PubsubMessage<P> {
                                     Phase0Attestation::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
-                                Some(Phase::Electra) => Attestation::Electra(
+                                Some(Phase::Electra)
+                                | Some(Phase::Fulu) => Attestation::Electra(
                                     ElectraAttestation::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
@@ -262,6 +265,10 @@ impl<P: Preset> PubsubMessage<P> {
                                     ElectraBeaconBlock::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
+                                Some(Phase::Fulu) => SignedBeaconBlock::Fulu(
+                                    FuluSignedBeaconBlock::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                ),
                                 None => {
                                     return Err(format!(
                                         "Unknown gossipsub fork digest: {:?}",
@@ -284,7 +291,7 @@ impl<P: Preset> PubsubMessage<P> {
                                 ))))
                             }
                             Some(
-                                Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella,
+                                Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Fulu,
                             )
                             | None => Err(format!(
                                 "beacon_blobs_and_sidecar topic invalid for given fork digest {:?}",
@@ -294,7 +301,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::DataColumnSidecar(subnet_id) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            Some(fork) if *fork >= Phase::Deneb => {
+                            Some(Phase::Fulu) => {
                                 let col_sidecar = Arc::new(
                                     DataColumnSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
@@ -355,6 +362,10 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
                                 Some(Phase::Electra) => AttesterSlashing::Electra(
+                                    ElectraAttesterSlashing::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                ),
+                                Some(Phase::Fulu) => AttesterSlashing::Electra(
                                     ElectraAttesterSlashing::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
@@ -424,6 +435,12 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?
                                         .into()
                                 }
+                                Some(Phase::Fulu) => {
+                                    SszReadDefault::from_ssz_default(data)
+                                        .map(LightClientFinalityUpdate::Fulu)
+                                        .map_err(|e| format!("{:?}", e))?
+                                        .into()
+                                }
                                 None => {
                                     return Err(format!(
                                         "light_client_finality_update topic invalid for given fork digest {:?}",
@@ -463,6 +480,11 @@ impl<P: Preset> PubsubMessage<P> {
                                 Some(Phase::Electra) => {
                                     SszReadDefault::from_ssz_default(data)
                                         .map(LightClientOptimisticUpdate::Electra)
+                                        .map_err(|e| format!("{:?}", e))?
+                                }
+                                Some(Phase::Fulu) => {
+                                    SszReadDefault::from_ssz_default(data)
+                                        .map(LightClientOptimisticUpdate::Fulu)
                                         .map_err(|e| format!("{:?}", e))?
                                 }
                                 None => {

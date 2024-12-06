@@ -26,6 +26,7 @@ use types::{
     deneb::containers::{BlobSidecar, SignedBeaconBlock as DenebSignedBeaconBlock},
     eip7594::DataColumnSidecar,
     electra::containers::SignedBeaconBlock as ElectraSignedBeaconBlock,
+    fulu::containers::SignedBeaconBlock as FuluSignedBeaconBlock,
     nonstandard::Phase,
     phase0::{containers::SignedBeaconBlock as Phase0SignedBeaconBlock, primitives::ForkDigest},
     preset::Preset,
@@ -409,6 +410,9 @@ fn context_bytes<P: Preset>(
                     return match **ref_box_block {
                         // NOTE: If you are adding another fork type here, be sure to modify the
                         //       `fork_context.to_context_bytes()` function to support it as well!
+                        SignedBeaconBlock::Fulu { .. } => {
+                            fork_context.to_context_bytes(Phase::Fulu)
+                        }
                         SignedBeaconBlock::Electra { .. } => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -430,13 +434,16 @@ fn context_bytes<P: Preset>(
                     };
                 }
                 RPCResponse::DataColumnsByRoot(_) | RPCResponse::DataColumnsByRange(_) => {
-                    return fork_context.to_context_bytes(Phase::Electra);
+                    return fork_context.to_context_bytes(Phase::Fulu);
                 }
                 RPCResponse::BlobsByRange(_) | RPCResponse::BlobsByRoot(_) => {
                     return fork_context.to_context_bytes(Phase::Deneb);
                 }
                 RPCResponse::LightClientBootstrap(lc_bootstrap) => {
                     return match **lc_bootstrap {
+                        LightClientBootstrap::Fulu(_) => {
+                            fork_context.to_context_bytes(Phase::Fulu)
+                        }
                         LightClientBootstrap::Electra(_) => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -453,6 +460,9 @@ fn context_bytes<P: Preset>(
                 }
                 RPCResponse::LightClientOptimisticUpdate(lc_optimistic_update) => {
                     return match **lc_optimistic_update {
+                        LightClientOptimisticUpdate::Fulu(_) => {
+                            fork_context.to_context_bytes(Phase::Fulu)
+                        }
                         LightClientOptimisticUpdate::Electra(_) => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -469,6 +479,9 @@ fn context_bytes<P: Preset>(
                 }
                 RPCResponse::LightClientFinalityUpdate(lc_finality_update) => {
                     return match **lc_finality_update {
+                        LightClientFinalityUpdate::Fulu(_) => {
+                            fork_context.to_context_bytes(Phase::Fulu)
+                        }
                         LightClientFinalityUpdate::Electra(_) => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -671,8 +684,7 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::DataColumnsByRangeV1 => match fork_name {
-            // TODO(das): update fork name
-            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::DataColumnsByRange(
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::DataColumnsByRange(
                 Arc::new(DataColumnSidecar::from_ssz_default(decoded_buffer)?),
             ))),
             Some(_) => Err(RPCError::ErrorResponse(
@@ -688,7 +700,7 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::DataColumnsByRootV1 => match fork_name {
-            Some(Phase::Deneb) | Some(Phase::Electra) => Ok(Some(RPCResponse::DataColumnsByRoot(
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::DataColumnsByRoot(
                 Arc::new(DataColumnSidecar::from_ssz_default(decoded_buffer)?),
             ))),
             Some(_) => Err(RPCError::ErrorResponse(
@@ -734,6 +746,11 @@ fn handle_rpc_response<P: Preset>(
                     .map(LightClientBootstrap::Electra)
                     .map(Arc::new)?,
             ))),
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::LightClientBootstrap(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientBootstrap::Fulu)
+                    .map(Arc::new)?,
+            ))),
             None => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
                 format!(
@@ -771,6 +788,11 @@ fn handle_rpc_response<P: Preset>(
                     .map(LightClientOptimisticUpdate::Electra)
                     .map(Arc::new)?,
             ))),
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::LightClientOptimisticUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientOptimisticUpdate::Fulu)
+                    .map(Arc::new)?,
+            ))),
             None => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
                 format!(
@@ -804,6 +826,11 @@ fn handle_rpc_response<P: Preset>(
             Some(Phase::Electra) => Ok(Some(RPCResponse::LightClientFinalityUpdate(
                 SszReadDefault::from_ssz_default(decoded_buffer)
                     .map(LightClientFinalityUpdate::Electra)
+                    .map(Arc::new)?,
+            ))),
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::LightClientFinalityUpdate(
+                SszReadDefault::from_ssz_default(decoded_buffer)
+                    .map(LightClientFinalityUpdate::Fulu)
                     .map(Arc::new)?,
             ))),
             None => Err(RPCError::ErrorResponse(
@@ -850,6 +877,9 @@ fn handle_rpc_response<P: Preset>(
                     decoded_buffer,
                 )?),
             )))),
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::BlocksByRange(Arc::new(
+                SignedBeaconBlock::Fulu(FuluSignedBeaconBlock::from_ssz_default(decoded_buffer)?),
+            )))),
             None => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
                 format!(
@@ -886,6 +916,9 @@ fn handle_rpc_response<P: Preset>(
                 SignedBeaconBlock::Electra(ElectraSignedBeaconBlock::from_ssz_default(
                     decoded_buffer,
                 )?),
+            )))),
+            Some(Phase::Fulu) => Ok(Some(RPCResponse::BlocksByRoot(Arc::new(
+                SignedBeaconBlock::Fulu(FuluSignedBeaconBlock::from_ssz_default(decoded_buffer)?),
             )))),
             None => Err(RPCError::ErrorResponse(
                 RPCResponseErrorCode::InvalidRequest,
