@@ -511,9 +511,7 @@ fn context_bytes<P: Preset>(
                 }
                 RpcSuccessResponse::LightClientBootstrap(lc_bootstrap) => {
                     return match **lc_bootstrap {
-                        LightClientBootstrap::Fulu(_) => {
-                            fork_context.to_context_bytes(Phase::Fulu)
-                        }
+                        LightClientBootstrap::Fulu(_) => fork_context.to_context_bytes(Phase::Fulu),
                         LightClientBootstrap::Electra(_) => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -568,9 +566,7 @@ fn context_bytes<P: Preset>(
                 }
                 RpcSuccessResponse::LightClientUpdatesByRange(lc_update) => {
                     return match **lc_update {
-                        LightClientUpdate::Fulu(_) => {
-                            fork_context.to_context_bytes(Phase::Fulu)
-                        }
+                        LightClientUpdate::Fulu(_) => fork_context.to_context_bytes(Phase::Fulu),
                         LightClientUpdate::Electra(_) => {
                             fork_context.to_context_bytes(Phase::Electra)
                         }
@@ -761,9 +757,11 @@ fn handle_rpc_response<P: Preset>(
             SignedBeaconBlock::Phase0(Phase0SignedBeaconBlock::from_ssz_default(decoded_buffer)?),
         )))),
         SupportedProtocol::BlobsByRangeV1 => match fork_name {
-            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => Ok(Some(RpcSuccessResponse::BlobsByRange(
-                Arc::new(BlobSidecar::from_ssz_default(decoded_buffer)?),
-            ))),
+            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => {
+                Ok(Some(RpcSuccessResponse::BlobsByRange(Arc::new(
+                    BlobSidecar::from_ssz_default(decoded_buffer)?,
+                ))))
+            }
             Some(Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella) => {
                 Err(RPCError::ErrorResponse(
                     RpcErrorResponse::InvalidRequest,
@@ -779,9 +777,11 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::BlobsByRootV1 => match fork_name {
-            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => Ok(Some(RpcSuccessResponse::BlobsByRoot(
-                Arc::new(BlobSidecar::from_ssz_default(decoded_buffer)?),
-            ))),
+            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => {
+                Ok(Some(RpcSuccessResponse::BlobsByRoot(Arc::new(
+                    BlobSidecar::from_ssz_default(decoded_buffer)?,
+                ))))
+            }
             Some(Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella) => {
                 Err(RPCError::ErrorResponse(
                     RpcErrorResponse::InvalidRequest,
@@ -800,9 +800,11 @@ fn handle_rpc_response<P: Preset>(
             // TODO(das): PeerDAS is currently supported for both deneb and electra. This check
             // does not advertise the topic on deneb, simply allows it to decode it. Advertise
             // logic is in `SupportedTopic::currently_supported`.
-            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => Ok(Some(RpcSuccessResponse::DataColumnsByRoot(
-                Arc::new(DataColumnSidecar::from_ssz_default(decoded_buffer)?),
-            ))),
+            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => {
+                Ok(Some(RpcSuccessResponse::DataColumnsByRoot(Arc::new(
+                    DataColumnSidecar::from_ssz_default(decoded_buffer)?,
+                ))))
+            }
             Some(Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella) => {
                 Err(RPCError::ErrorResponse(
                     RpcErrorResponse::InvalidRequest,

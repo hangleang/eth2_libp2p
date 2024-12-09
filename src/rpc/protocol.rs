@@ -115,7 +115,7 @@ pub fn rpc_block_limits_by_fork(current_fork: Phase) -> RpcLimits {
         ),
         Phase::Fulu => RpcLimits::new(
             SIGNED_BEACON_BLOCK_PHASE0_MIN, // Base block is smaller than altair and merge blocks
-            SIGNED_BEACON_BLOCK_FULU_MAX, // Electra block is larger than Deneb block
+            SIGNED_BEACON_BLOCK_FULU_MAX,   // Electra block is larger than Deneb block
         ),
     }
 }

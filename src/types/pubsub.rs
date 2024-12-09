@@ -192,11 +192,12 @@ impl<P: Preset> PubsubMessage<P> {
                                     Phase0SignedAggregateAndProof::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
-                                Some(Phase::Electra) 
-                                | Some(Phase::Fulu) => SignedAggregateAndProof::Electra(
-                                    ElectraSignedAggregateAndProof::from_ssz_default(data)
-                                        .map_err(|e| format!("{:?}", e))?,
-                                ),
+                                Some(Phase::Electra) | Some(Phase::Fulu) => {
+                                    SignedAggregateAndProof::Electra(
+                                        ElectraSignedAggregateAndProof::from_ssz_default(data)
+                                            .map_err(|e| format!("{:?}", e))?,
+                                    )
+                                }
                                 None => {
                                     return Err(format!(
                                         "Unknown gossipsub fork digest: {:?}",
@@ -220,8 +221,7 @@ impl<P: Preset> PubsubMessage<P> {
                                     Phase0Attestation::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
-                                Some(Phase::Electra)
-                                | Some(Phase::Fulu) => Attestation::Electra(
+                                Some(Phase::Electra) | Some(Phase::Fulu) => Attestation::Electra(
                                     ElectraAttestation::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 ),
@@ -291,7 +291,11 @@ impl<P: Preset> PubsubMessage<P> {
                                 ))))
                             }
                             Some(
-                                Phase::Phase0 | Phase::Altair | Phase::Bellatrix | Phase::Capella | Phase::Fulu,
+                                Phase::Phase0
+                                | Phase::Altair
+                                | Phase::Bellatrix
+                                | Phase::Capella
+                                | Phase::Fulu,
                             )
                             | None => Err(format!(
                                 "beacon_blobs_and_sidecar topic invalid for given fork digest {:?}",
