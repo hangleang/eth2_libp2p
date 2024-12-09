@@ -238,6 +238,7 @@ pub struct MetaDataV3 {
     pub attnets: EnrAttestationBitfield,
     /// The persistent sync committee bitfield.
     pub syncnets: EnrSyncCommitteeBitfield,
+    /// The persistent custody subnet count.
     pub custody_subnet_count: u64,
 }
 
@@ -877,7 +878,15 @@ impl std::fmt::Display for RpcErrorResponse {
 
 impl std::fmt::Display for StatusMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Status Message: Fork Digest: {:?}, Finalized Root: {}, Finalized Epoch: {}, Head Root: {}, Head Slot: {}", self.fork_digest, self.finalized_root, self.finalized_epoch, self.head_root, self.head_slot)
+        write!(
+            f, 
+            "Status Message: Fork Digest: {:?}, Finalized Root: {}, Finalized Epoch: {}, Head Root: {}, Head Slot: {}", 
+            self.fork_digest, 
+            self.finalized_root, 
+            self.finalized_epoch, 
+            self.head_root, 
+            self.head_slot
+        )
     }
 }
 

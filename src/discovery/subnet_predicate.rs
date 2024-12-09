@@ -40,7 +40,7 @@ pub fn subnet_predicate(
                     subnets.contains(subnet_id)
                 } else {
                     false
-                }
+                }        
             }
         });
 

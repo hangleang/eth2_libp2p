@@ -71,6 +71,7 @@ pub fn fork_core_topics(chain_config: &ChainConfig, phase: &Phase) -> Vec<Gossip
             deneb_topics
         }
         Phase::Electra => vec![],
+        Phase::Fulu => vec![],
     }
 }
 
@@ -154,11 +155,11 @@ impl std::fmt::Display for GossipKind {
             GossipKind::SyncCommitteeMessage(subnet_id) => {
                 write!(f, "sync_committee_{}", *subnet_id)
             }
-            GossipKind::BlobSidecar(blob_index) => {
-                write!(f, "{}{}", BLOB_SIDECAR_PREFIX, blob_index)
-            }
             GossipKind::DataColumnSidecar(column_index) => {
                 write!(f, "{}{}", DATA_COLUMN_SIDECAR_PREFIX, column_index)
+            }
+            GossipKind::BlobSidecar(blob_index) => {
+                write!(f, "{}{}", BLOB_SIDECAR_PREFIX, blob_index)
             }
             x => f.write_str(x.as_ref()),
         }

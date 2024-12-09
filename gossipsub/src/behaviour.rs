@@ -1729,6 +1729,7 @@ where
             );
             self.gossip_promises
                 .reject_message(msg_id, &RejectReason::BlackListedPeer);
+
             if let Some((peer_score, ..)) = &mut self.peer_score {
                 peer_score.reject_message(
                     propagation_source,

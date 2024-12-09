@@ -156,7 +156,7 @@ where
 /// This core behaviour is managed by `Behaviour` which adds peer management to all core
 /// behaviours.
 pub struct Network<AppReqId: ReqId, P: Preset> {
-    swarm: libp2p::swarm::Swarm<Behaviour<AppReqId, P>>,
+    swarm: Swarm<Behaviour<AppReqId, P>>,
     /* Auxiliary Fields */
     /// A collections of variables accessible outside the network service.
     network_globals: Arc<NetworkGlobals>,
@@ -303,6 +303,8 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                     current_slot,
                 )
             };
+
+            trace!(log, "Using peer score params"; "params" => ?params);
 
             // Set up a scoring update interval
             let update_gossipsub_scores = tokio::time::interval(params.decay_interval);
@@ -856,55 +858,57 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         }
     }
 
-    /// Publishes message on the pubsub (gossipsub) behaviour, choosing the encoding.
-    pub fn publish(&mut self, message: PubsubMessage<P>) {
-        for topic in message.topics(GossipEncoding::default(), self.enr_fork_id.fork_digest) {
-            let message_data = message.encode(GossipEncoding::default()).expect("TODO");
+    /// Publishes a list of messages on the pubsub (gossipsub) behaviour, choosing the encoding.
+    pub fn publish(&mut self, messages: Vec<PubsubMessage<P>>) {
+        for message in messages {
+            for topic in message.topics(GossipEncoding::default(), self.enr_fork_id.fork_digest) {
+                let message_data = message.encode(GossipEncoding::default()).expect("TODO");
 
-            if let Err(e) = self
-                .gossipsub_mut()
-                .publish(Topic::from(topic.clone()), message_data.clone())
-            {
-                match e {
-                    PublishError::Duplicate => {
-                        debug!(
-                            self.log,
-                            "Attempted to publish duplicate message";
-                            "kind" => %topic.kind(),
-                        );
+                if let Err(e) = self
+                    .gossipsub_mut()
+                    .publish(Topic::from(topic.clone()), message_data.clone())
+                {
+                    match e {
+                        PublishError::Duplicate => {
+                            debug!(
+                                self.log,
+                                "Attempted to publish duplicate message";
+                                "kind" => %topic.kind(),
+                            );
+                        }
+                        ref e => {
+                            warn!(
+                                self.log,
+                                "Could not publish message";
+                                "error" => ?e,
+                                "kind" => %topic.kind(),
+                            );
+                        }
                     }
-                    ref e => {
-                        warn!(
-                            self.log,
-                            "Could not publish message";
-                            "error" => ?e,
-                            "kind" => %topic.kind(),
-                        );
-                    }
-                }
 
-                // add to metrics
-                match topic.kind() {
-                    GossipKind::Attestation(subnet_id) => {
-                        if let Some(v) = crate::common::metrics::get_int_gauge(
-                            &metrics::FAILED_ATTESTATION_PUBLISHES_PER_SUBNET,
-                            &[&subnet_id.to_string()],
-                        ) {
-                            v.inc()
-                        };
+                    // add to metrics
+                    match topic.kind() {
+                        GossipKind::Attestation(subnet_id) => {
+                            if let Some(v) = crate::common::metrics::get_int_gauge(
+                                &metrics::FAILED_ATTESTATION_PUBLISHES_PER_SUBNET,
+                                &[&subnet_id.to_string()],
+                            ) {
+                                v.inc()
+                            };
+                        }
+                        kind => {
+                            if let Some(v) = crate::common::metrics::get_int_gauge(
+                                &metrics::FAILED_PUBLISHES_PER_MAIN_TOPIC,
+                                &[&format!("{:?}", kind)],
+                            ) {
+                                v.inc()
+                            };
+                        }
                     }
-                    kind => {
-                        if let Some(v) = crate::common::metrics::get_int_gauge(
-                            &metrics::FAILED_PUBLISHES_PER_MAIN_TOPIC,
-                            &[&format!("{:?}", kind)],
-                        ) {
-                            v.inc()
-                        };
-                    }
-                }
 
-                if let PublishError::InsufficientPeers = e {
-                    self.gossip_cache.insert(topic, message_data);
+                    if let PublishError::InsufficientPeers = e {
+                        self.gossip_cache.insert(topic, message_data);
+                    }
                 }
             }
         }

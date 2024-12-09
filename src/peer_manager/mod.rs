@@ -22,7 +22,6 @@ use types::phase0::primitives::SubnetId;
 
 pub use libp2p::core::Multiaddr;
 pub use libp2p::identity::Keypair;
-
 pub mod peerdb;
 
 use crate::peer_manager::peerdb::client::ClientKind;
@@ -486,7 +485,7 @@ impl PeerManager {
         let score = self.network_globals.peers.read().score(peer_id);
         debug!(self.log, "RPC Error"; "protocol" => %protocol, "err" => %err, "client" => %client,
             "peer_id" => %peer_id, "score" => %score, "direction" => ?direction);
-        crate::common::metrics::inc_counter_vec(
+        metrics::inc_counter_vec(
             &metrics::TOTAL_RPC_ERRORS_PER_CLIENT,
             &[
                 client.kind.as_ref(),
@@ -555,7 +554,7 @@ impl PeerManager {
                     Protocol::BlocksByRange => PeerAction::MidToleranceError,
                     Protocol::BlocksByRoot => PeerAction::MidToleranceError,
                     Protocol::BlobsByRange => PeerAction::MidToleranceError,
-                    // Grandine does not currently make light client requests; therefore, this
+                    // Lighthouse does not currently make light client requests; therefore, this
                     // is an unexpected scenario. We do not ban the peer for rate limiting.
                     Protocol::LightClientBootstrap => return,
                     Protocol::LightClientOptimisticUpdate => return,
@@ -2373,6 +2372,7 @@ mod tests {
                 .iter()
                 .filter_map(|p| if p.trusted { Some(p.peer_id) } else { None })
                 .collect();
+
             // If we have a high percentage of trusted peers, it is very difficult to reason about
             // the expected results of the pruning.
             if trusted_peers.len() > peer_conditions.len() / 3_usize {

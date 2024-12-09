@@ -210,7 +210,7 @@ pub fn load_or_build_metadata(
                         {
                             meta_data.seq_number += 1;
                         }
-                        debug!(log, "Loaded metadata from disk");
+                        debug!(log, "Loaded MetaDataV2 from disk");
                     }
                     Err(_) => {
                         match MetaDataV1::from_ssz_default(&metadata_ssz) {
@@ -218,7 +218,7 @@ pub fn load_or_build_metadata(
                                 let persisted_metadata = MetaData::V1(persisted_metadata);
                                 // Increment seq number as the persisted metadata version is updated
                                 meta_data.seq_number = persisted_metadata.seq_number() + 1;
-                                debug!(log, "Loaded metadata from disk");
+                                debug!(log, "Loaded MetaDataV1 from disk");
                             }
                             Err(e) => {
                                 debug!(

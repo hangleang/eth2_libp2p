@@ -41,6 +41,7 @@ pub const SIGNED_BEACON_BLOCK_BELLATRIX_MAX: usize = 1125899911195388;
 pub const SIGNED_BEACON_BLOCK_CAPELLA_MAX: usize = 1125899911199368;
 pub const SIGNED_BEACON_BLOCK_DENEB_MAX: usize = 1125899911199676;
 pub const SIGNED_BEACON_BLOCK_ELECTRA_MAX: usize = 1125899913301268;
+pub const SIGNED_BEACON_BLOCK_FULU_MAX: usize = 1125899913301268;
 
 pub const BLOB_SIDECAR_MIN: usize = 131928;
 pub const BLOB_SIDECAR_MAX: usize = 131928;
@@ -78,6 +79,7 @@ pub fn max_rpc_size(fork_context: &ForkContext, max_chunk_size: usize) -> usize 
         Phase::Capella => max_chunk_size,
         Phase::Deneb => max_chunk_size,
         Phase::Electra => max_chunk_size,
+        Phase::Fulu => max_chunk_size,
     }
 }
 
@@ -111,6 +113,10 @@ pub fn rpc_block_limits_by_fork(current_fork: Phase) -> RpcLimits {
             SIGNED_BEACON_BLOCK_PHASE0_MIN, // Base block is smaller than altair and merge blocks
             SIGNED_BEACON_BLOCK_ELECTRA_MAX, // Electra block is larger than Deneb block
         ),
+        Phase::Fulu => RpcLimits::new(
+            SIGNED_BEACON_BLOCK_PHASE0_MIN, // Base block is smaller than altair and merge blocks
+            SIGNED_BEACON_BLOCK_FULU_MAX, // Electra block is larger than Deneb block
+        ),
     }
 }
 
@@ -120,7 +126,7 @@ fn rpc_light_client_updates_by_range_limits_by_fork<P: Preset>(current_fork: Pha
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra => RpcLimits::new(
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
@@ -133,7 +139,7 @@ fn rpc_light_client_finality_update_limits_by_fork<P: Preset>(current_fork: Phas
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra => RpcLimits::new(
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
@@ -146,7 +152,7 @@ fn rpc_light_client_optimistic_update_limits_by_fork<P: Preset>(current_fork: Ph
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra => RpcLimits::new(
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
@@ -159,7 +165,7 @@ fn rpc_light_client_bootstrap_limits_by_fork<P: Preset>(current_fork: Phase) -> 
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra => RpcLimits::new(
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu => RpcLimits::new(
             altair_fixed_len,
             altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
         ),
@@ -316,7 +322,6 @@ impl SupportedProtocol {
         let mut supported = vec![
             ProtocolId::new(Self::StatusV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::GoodbyeV1, Encoding::SSZSnappy),
-            // V2 variants have higher preference then V1
             ProtocolId::new(Self::BlocksByRangeV2, Encoding::SSZSnappy),
             ProtocolId::new(Self::BlocksByRangeV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::BlocksByRootV2, Encoding::SSZSnappy),
@@ -338,8 +343,8 @@ impl SupportedProtocol {
         }
         if fork_context.fork_exists(Phase::Deneb) {
             supported.extend_from_slice(&[
-                ProtocolId::new(SupportedProtocol::BlobsByRootV1, Encoding::SSZSnappy),
-                ProtocolId::new(SupportedProtocol::BlobsByRangeV1, Encoding::SSZSnappy),
+                ProtocolId::new(Self::BlobsByRootV1, Encoding::SSZSnappy),
+                ProtocolId::new(Self::BlobsByRangeV1, Encoding::SSZSnappy),
             ]);
         }
         if fork_context.chain_config().is_eip7594_fork_epoch_set() {

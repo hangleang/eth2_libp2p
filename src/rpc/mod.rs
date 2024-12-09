@@ -191,6 +191,7 @@ impl<Id: ReqId, P: Preset> RPC<Id, P> {
         });
 
         let self_limiter = outbound_rate_limiter_config.map(|config| {
+            debug!(log, "Using self rate limiting params"; "config" => ?config);
             SelfRateLimiter::new(config, log.clone()).expect("Configuration parameters are valid")
         });
 

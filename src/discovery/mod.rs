@@ -558,8 +558,8 @@ impl Discovery {
     /// Updates the `eth2` field of our local ENR.
     pub fn update_eth2_enr(&mut self, enr_fork_id: EnrForkId) {
         // to avoid having a reference to the spec constant, for the logging we assume
-        // FAR_FUTURE_EPOCH is u64::max_value()
-        let next_fork_epoch_log = if enr_fork_id.next_fork_epoch == u64::max_value() {
+        // FAR_FUTURE_EPOCH is u64::MAX
+        let next_fork_epoch_log = if enr_fork_id.next_fork_epoch == u64::MAX {
             String::from("No other fork")
         } else {
             format!("{:?}", enr_fork_id.next_fork_epoch)
@@ -1187,11 +1187,12 @@ impl Discovery {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{
-        rpc::methods::{MetaData, MetaDataV2},
+        rpc::{MetaData, MetaDataV2},
         types::EnrAttestationBitfield,
     };
+
+    use super::*;
     use libp2p::identity::secp256k1;
     use slog::{o, Drain};
     use std_ext::ArcExt as _;
