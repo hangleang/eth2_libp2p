@@ -152,7 +152,17 @@ impl<P: Preset> Encoder<RpcResponse<P>> for SSZSnappyInboundCodec<P> {
             item.as_u8()
                 .expect("Should never encode a stream termination"),
         );
-        self.encode_response(item, dst)
+
+        let result = self.encode_response(item, dst);
+        let count: u64 = dst
+            .len()
+            .try_into()
+            .map_err(|_| RPCError::InvalidData("byte count does not fit in u64".into()))?;
+
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_SENT_BYTES, count);
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_TOTAL_BYTES, count);
+
+        result
     }
 }
 
@@ -162,6 +172,14 @@ impl<P: Preset> Decoder for SSZSnappyInboundCodec<P> {
     type Error = RPCError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let count: u64 = src
+            .len()
+            .try_into()
+            .map_err(|_| RPCError::InvalidData("byte count does not fit in u64".into()))?;
+
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_RECV_BYTES, count);
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_TOTAL_BYTES, count);
+
         if self.protocol.versioned_protocol == SupportedProtocol::MetaDataV1 {
             return Ok(Some(RequestType::MetaData(MetadataRequest::new_v1())));
         }
@@ -383,6 +401,15 @@ impl<P: Preset> Encoder<RequestType<P>> for SSZSnappyOutboundCodec<P> {
 
         // Write compressed bytes to `dst`
         dst.extend_from_slice(writer.get_ref());
+
+        let count: u64 = dst
+            .len()
+            .try_into()
+            .map_err(|_| RPCError::InvalidData("byte count does not fit in u64".into()))?;
+
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_SENT_BYTES, count);
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_TOTAL_BYTES, count);
+
         Ok(())
     }
 }
@@ -401,6 +428,15 @@ impl<P: Preset> Decoder for SSZSnappyOutboundCodec<P> {
         if src.len() <= 1 {
             return Ok(None);
         }
+
+        let count: u64 = src
+            .len()
+            .try_into()
+            .map_err(|_| RPCError::InvalidData("byte count does not fit in u64".into()))?;
+
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_RECV_BYTES, count);
+        crate::common::metrics::inc_counter_by(&crate::metrics::RPC_TOTAL_BYTES, count);
+
         // using the response code determine which kind of payload needs to be decoded.
         let response_code = self.current_response_code.unwrap_or_else(|| {
             let resp_code = src.split_to(1)[0];
