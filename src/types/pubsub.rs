@@ -280,7 +280,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::BlobSidecar(blob_index) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Deneb | Phase::Electra) => {
+                            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => {
                                 let blob_sidecar = Arc::new(
                                     BlobSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
@@ -295,7 +295,6 @@ impl<P: Preset> PubsubMessage<P> {
                                 | Phase::Altair
                                 | Phase::Bellatrix
                                 | Phase::Capella
-                                | Phase::Fulu,
                             )
                             | None => Err(format!(
                                 "beacon_blobs_and_sidecar topic invalid for given fork digest {:?}",
@@ -305,7 +304,8 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::DataColumnSidecar(subnet_id) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Fulu) => {
+                            // TODO(das): Remove Deneb fork
+                            Some(fork) if *fork >= Phase::Deneb => {
                                 let col_sidecar = Arc::new(
                                     DataColumnSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
