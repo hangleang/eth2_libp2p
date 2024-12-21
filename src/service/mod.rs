@@ -212,7 +212,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         )?;
 
         // construct the metadata
-        let custody_subnet_count = chain_config.is_eip7594_fork_epoch_set().then(|| {
+        let custody_subnet_count = chain_config.is_eip7594_scheduled().then(|| {
             if config.subscribe_all_data_column_subnets {
                 chain_config.data_column_sidecar_subnet_count
             } else {
@@ -1204,7 +1204,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
 
     /// Sends a METADATA request to a peer.
     fn send_meta_data_request(&mut self, peer_id: PeerId) {
-        let event = if self.network_globals.config.is_eip7594_fork_epoch_set() {
+        let event = if self.network_globals.config.is_eip7594_scheduled() {
             // Nodes with higher custody will probably start advertising it
             // before peerdas is activated
             RequestType::MetaData(MetadataRequest::new_v3())

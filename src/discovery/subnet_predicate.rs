@@ -1,8 +1,8 @@
 //! The subnet predicate used for searching for a particular subnet.
 use super::*;
-use eip_7594::get_custody_columns;
+use crate::eip7594::compute_custody_subnets;
+use itertools::Itertools as _;
 use slog::trace;
-use ssz::Uint256;
 use std::sync::Arc;
 use types::config::Config as ChainConfig;
 
@@ -32,12 +32,12 @@ pub fn subnet_predicate(
             }),
             Subnet::DataColumn(subnet_id) => {
                 if let Ok(custody_subnet_count) = enr.custody_subnet_count(&chain_config) {
-                    let subnets = get_custody_columns(
-                        Uint256::from_be_bytes(enr.node_id().raw()),
+                    compute_custody_subnets(
+                        enr.node_id().raw(),
                         custody_subnet_count,
-                    );
-
-                    subnets.contains(subnet_id)
+                        &chain_config,
+                    )
+                    .map_or(false, |mut subnets| subnets.contains(subnet_id))
                 } else {
                     false
                 }

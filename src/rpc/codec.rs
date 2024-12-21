@@ -25,8 +25,8 @@ use types::{
     },
     config::Config as ChainConfig,
     deneb::containers::{BlobSidecar, SignedBeaconBlock as DenebSignedBeaconBlock},
-    eip7594::DataColumnSidecar,
     electra::containers::SignedBeaconBlock as ElectraSignedBeaconBlock,
+    fulu::containers::DataColumnSidecar,
     fulu::containers::SignedBeaconBlock as FuluSignedBeaconBlock,
     nonstandard::Phase,
     phase0::{containers::SignedBeaconBlock as Phase0SignedBeaconBlock, primitives::ForkDigest},
@@ -1177,7 +1177,7 @@ mod tests {
         combined::SignedBeaconBlock,
         config::Config,
         deneb::containers::BlobIdentifier,
-        eip7594::DataColumnIdentifier,
+        fulu::containers::DataColumnIdentifier,
         phase0::primitives::{ForkDigest, H256},
         preset::Mainnet,
     };

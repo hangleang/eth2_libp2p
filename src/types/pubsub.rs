@@ -20,12 +20,12 @@ use types::{
         SignedAggregateAndProof, SignedBeaconBlock,
     },
     deneb::containers::{BlobSidecar, SignedBeaconBlock as DenebBeaconBlock},
-    eip7594::DataColumnSidecar,
     electra::containers::{
         Attestation as ElectraAttestation, AttesterSlashing as ElectraAttesterSlashing,
         SignedAggregateAndProof as ElectraSignedAggregateAndProof,
         SignedBeaconBlock as ElectraBeaconBlock,
     },
+    fulu::containers::DataColumnSidecar,
     fulu::containers::SignedBeaconBlock as FuluSignedBeaconBlock,
     nonstandard::Phase,
     phase0::{
@@ -280,7 +280,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::BlobSidecar(blob_index) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Deneb | Phase::Electra | Phase::Fulu) => {
+                            Some(Phase::Deneb | Phase::Electra) => {
                                 let blob_sidecar = Arc::new(
                                     BlobSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
@@ -295,6 +295,7 @@ impl<P: Preset> PubsubMessage<P> {
                                 | Phase::Altair
                                 | Phase::Bellatrix
                                 | Phase::Capella
+                                | Phase::Fulu,
                             )
                             | None => Err(format!(
                                 "beacon_blobs_and_sidecar topic invalid for given fork digest {:?}",
@@ -304,8 +305,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::DataColumnSidecar(subnet_id) => {
                         match fork_context.from_context_bytes(gossip_topic.fork_digest) {
-                            // TODO(das): Remove Deneb fork
-                            Some(fork) if *fork >= Phase::Deneb => {
+                            Some(Phase::Fulu) => {
                                 let col_sidecar = Arc::new(
                                     DataColumnSidecar::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
@@ -313,7 +313,7 @@ impl<P: Preset> PubsubMessage<P> {
                                 let sidecar_epoch =
                                     misc::compute_epoch_at_slot::<P>(col_sidecar.slot());
                                 let peer_das_enabled =
-                                    sidecar_epoch >= fork_context.chain_config().eip7594_fork_epoch;
+                                    sidecar_epoch >= fork_context.chain_config().fulu_fork_epoch;
                                 if peer_das_enabled {
                                     Ok(PubsubMessage::DataColumnSidecar(Box::new((
                                         *subnet_id,
@@ -326,7 +326,15 @@ impl<P: Preset> PubsubMessage<P> {
                                     ))
                                 }
                             }
-                            Some(_) | None => Err(format!(
+                            Some(
+                                Phase::Phase0
+                                | Phase::Altair
+                                | Phase::Bellatrix
+                                | Phase::Capella
+                                | Phase::Deneb
+                                | Phase::Electra,
+                            )
+                            | None => Err(format!(
                                 "data_column_sidecar topic invalid for given fork digest {:?}",
                                 gossip_topic.fork_digest
                             )),

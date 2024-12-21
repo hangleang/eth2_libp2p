@@ -88,6 +88,8 @@ pub fn attestation_sync_committee_topics() -> impl Iterator<Item = GossipKind> {
 
 /// Returns all the topics that we need to subscribe to for a given fork
 /// including topics from older forks and new topics for the current fork.
+/// TODO(peerdas-fulu): add network_globals as new param to get the sampling subnets to subscribe
+///                     at fulu phase, but that will messing the code with the optional param
 pub fn core_topics_to_subscribe(
     chain_config: &ChainConfig,
     mut current_phase: Phase,

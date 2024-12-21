@@ -14,7 +14,7 @@ use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
 use typenum::{Unsigned as _, U256};
 use types::deneb::containers::BlobIdentifier;
-use types::eip7594::NumberOfColumns;
+use types::fulu::consts::NumberOfColumns;
 use types::nonstandard::Phase;
 use types::{
     combined::{
@@ -23,7 +23,10 @@ use types::{
     },
     config::Config as ChainConfig,
     deneb::containers::BlobSidecar,
-    eip7594::{ColumnIndex, DataColumnIdentifier, DataColumnSidecar},
+    fulu::{
+        containers::{DataColumnIdentifier, DataColumnSidecar},
+        primitives::ColumnIndex,
+    },
     phase0::primitives::{Epoch, ForkDigest, Slot, H256},
     preset::Preset,
     traits::SignedBeaconBlock as _,
