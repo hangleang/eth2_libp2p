@@ -1,4 +1,5 @@
 //! Available RPC methods types and ids.
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use crate::types::{EnrAttestationBitfield, EnrSyncCommitteeBitfield};
@@ -24,7 +25,7 @@ use types::{
     deneb::containers::BlobSidecar,
     fulu::{
         consts::NumberOfColumns,
-        containers::{DataColumnIdentifier, DataColumnSidecar},
+        containers::{DataColumnSidecar, DataColumnsByRootIdentifier},
         primitives::ColumnIndex,
     },
     phase0::primitives::{Epoch, ForkDigest, Slot, H256},
@@ -664,31 +665,31 @@ impl BlobsByRootRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DataColumnsByRootRequest {
     /// The list of beacon block roots and column indices being requested.
-    pub data_column_ids: DynamicList<DataColumnIdentifier>,
+    pub data_column_ids: DynamicList<DataColumnsByRootIdentifier>,
 }
 
 impl DataColumnsByRootRequest {
     pub fn new(
         config: &ChainConfig,
-        data_column_identifiers: impl Iterator<Item = DataColumnIdentifier>,
+        data_column_identifiers: impl Iterator<Item = DataColumnsByRootIdentifier>,
     ) -> Self {
         let data_column_ids = DynamicList::from_iter_with_maximum(
             data_column_identifiers,
-            config.max_request_data_column_sidecars as usize,
+            config.max_request_blocks_deneb as usize,
         );
 
         Self { data_column_ids }
     }
 
-    pub fn group_by_ordered_block_root(&self) -> Vec<(H256, Vec<ColumnIndex>)> {
-        let mut column_indexes_by_block = BTreeMap::<H256, Vec<ColumnIndex>>::new();
+    pub fn group_by_ordered_block_root(&self) -> BTreeMap<H256, HashSet<ColumnIndex>> {
+        let mut column_indexes_by_block = BTreeMap::<H256, HashSet<ColumnIndex>>::new();
         for request_id in self.data_column_ids.as_ref() {
             column_indexes_by_block
                 .entry(request_id.block_root)
                 .or_default()
-                .push(request_id.index);
+                .extend(request_id.columns.as_ref());
         }
-        column_indexes_by_block.into_iter().collect()
+        column_indexes_by_block
     }
 }
 

@@ -1180,7 +1180,7 @@ mod tests {
         combined::SignedBeaconBlock,
         config::Config,
         deneb::containers::BlobIdentifier,
-        fulu::containers::DataColumnIdentifier,
+        fulu::containers::DataColumnsByRootIdentifier,
         phase0::primitives::{ForkDigest, H256},
         preset::Mainnet,
     };
@@ -1276,9 +1276,10 @@ mod tests {
 
     fn dcbroot_request() -> DataColumnsByRootRequest {
         DataColumnsByRootRequest {
-            data_column_ids: DynamicList::single(DataColumnIdentifier {
+            data_column_ids: DynamicList::single(DataColumnsByRootIdentifier {
                 block_root: H256::zero(),
-                index: 0,
+                columns: ContiguousList::try_from(vec![1, 2, 3])
+                    .expect("columns indices must be able to parsed from list of numbers"),
             }),
         }
     }

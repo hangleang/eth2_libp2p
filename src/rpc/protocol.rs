@@ -20,7 +20,7 @@ use tokio_util::{
 };
 use typenum::Unsigned as _;
 use types::deneb::containers::BlobIdentifier;
-use types::fulu::containers::{DataColumnIdentifier, DataColumnSidecar};
+use types::fulu::containers::{DataColumnSidecar, DataColumnsByRootIdentifier};
 use types::{
     altair::containers::{
         LightClientBootstrap as AltairLightClientBootstrap,
@@ -453,8 +453,8 @@ impl ProtocolId {
             ),
             Protocol::DataColumnsByRoot => RpcLimits::new(
                 0,
-                chain_config.max_request_data_column_sidecars as usize
-                    * DataColumnIdentifier::SIZE.get(),
+                chain_config.max_request_blocks_deneb as usize
+                    * DataColumnsByRootIdentifier::SIZE.get(),
             ),
             Protocol::DataColumnsByRange => RpcLimits::new(
                 DataColumnsByRangeRequest::ssz_min_len().unwrap_or_default(),
