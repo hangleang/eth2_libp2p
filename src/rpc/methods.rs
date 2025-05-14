@@ -372,7 +372,10 @@ pub struct BlobsByRangeRequest {
 
 impl BlobsByRangeRequest {
     pub fn max_blobs_requested(&self, config: &ChainConfig, phase: Phase) -> u64 {
-        self.count.saturating_mul(phase.max_blobs_per_block(config))
+        let max_blobs_per_block = phase
+            .max_blobs_per_block(config.fork_epoch(phase), config)
+            .expect("blob schedule is not defined.");
+        self.count.saturating_mul(max_blobs_per_block)
     }
 }
 
