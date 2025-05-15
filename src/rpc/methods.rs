@@ -681,15 +681,8 @@ impl DataColumnsByRootRequest {
         Self { data_column_ids }
     }
 
-    pub fn group_by_ordered_block_root(&self) -> BTreeMap<H256, HashSet<ColumnIndex>> {
-        let mut column_indexes_by_block = BTreeMap::<H256, HashSet<ColumnIndex>>::new();
-        for request_id in self.data_column_ids.as_ref() {
-            column_indexes_by_block
-                .entry(request_id.block_root)
-                .or_default()
-                .extend(request_id.columns.as_ref());
-        }
-        column_indexes_by_block
+    pub fn max_requested(&self) -> usize {
+        self.data_column_ids.iter().map(|id| id.columns.len()).sum()
     }
 }
 
