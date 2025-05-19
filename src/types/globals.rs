@@ -9,6 +9,7 @@ use eip_7594::{
 };
 use helper_functions::misc::compute_subnet_for_data_column_sidecar;
 use parking_lot::RwLock;
+use slog::error;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std_ext::ArcExt as _;
@@ -38,6 +39,8 @@ pub struct NetworkGlobals {
     /// The computed sampling subnets and columns is stored to avoid re-computing.
     pub sampling_subnets: HashSet<SubnetId>,
     pub sampling_columns: HashSet<ColumnIndex>,
+    /// Constant custody group count (CGC) set at startup
+    custody_group_count: u64,
     /// Target subnet peers.
     pub target_subnet_peers: usize,
     /// Network-related configuration. Immutable after initialization.
@@ -55,36 +58,40 @@ impl NetworkGlobals {
         log: &slog::Logger,
         network_config: Arc<NetworkConfig>,
     ) -> Self {
-        let (sampling_subnets, sampling_columns) = if config.is_peerdas_scheduled() {
-            let node_id = enr.node_id().raw();
+        let node_id = enr.node_id().raw();
 
-            let custody_group_count = local_metadata
-                .custody_group_count()
-                .expect("custody group count must be set if PeerDAS is scheduled");
-
-            let sampling_size = config.sampling_size(custody_group_count);
-
-            let custody_groups = get_custody_groups(node_id, sampling_size, &config)
-                .expect("should compute custody groups for node");
-
-            let mut sampling_subnets = HashSet::new();
-            for custody_index in &custody_groups {
-                let subnets = compute_subnets_from_custody_group(*custody_index, &config)
-                    .expect("should compute custody subnets for node");
-                sampling_subnets.extend(subnets);
+        let custody_group_count = match local_metadata.custody_group_count() {
+            Some(cgc) if cgc <= config.number_of_custody_groups => cgc,
+            _ => {
+                if config.is_peerdas_scheduled() {
+                    error!(
+                        log,
+                        "custody_group_count from metadata is either invalid or not set. This is a bug!";
+                        "info" => "falling back to default custody requirement",
+                    );
+                }
+                config.custody_requirement
             }
-
-            let mut sampling_columns = HashSet::new();
-            for custody_index in &custody_groups {
-                let columns = compute_columns_for_custody_group(*custody_index, &config)
-                    .expect("should compute custody columns for node");
-                sampling_columns.extend(columns);
-            }
-
-            (sampling_subnets, sampling_columns)
-        } else {
-            (HashSet::new(), HashSet::new())
         };
+
+        let sampling_size = config.sampling_size(custody_group_count);
+
+        let custody_groups = get_custody_groups(node_id, sampling_size, &config)
+            .expect("should compute custody groups for node");
+
+        let mut sampling_subnets = HashSet::new();
+        for custody_index in &custody_groups {
+            let subnets = compute_subnets_from_custody_group(*custody_index, &config)
+                .expect("should compute custody subnets for node");
+            sampling_subnets.extend(subnets);
+        }
+
+        let mut sampling_columns = HashSet::new();
+        for custody_index in &custody_groups {
+            let columns = compute_columns_for_custody_group(*custody_index, &config)
+                .expect("should compute custody columns for node");
+            sampling_columns.extend(columns);
+        }
 
         NetworkGlobals {
             config: config.clone_arc(),
@@ -103,6 +110,7 @@ impl NetworkGlobals {
             backfill_state: RwLock::new(BackFillState::Paused),
             sampling_subnets,
             sampling_columns,
+            custody_group_count,
             target_subnet_peers,
             network_config,
         }
@@ -122,6 +130,16 @@ impl NetworkGlobals {
     /// Returns the list of `Multiaddr` that the underlying libp2p instance is listening on.
     pub fn listen_multiaddrs(&self) -> Vec<Multiaddr> {
         self.listen_multiaddrs.read().clone()
+    }
+
+    // Returns true if this node is configured as a PeerDAS supernode
+    pub fn is_supernode(&self) -> bool {
+        self.custody_group_count == self.config.number_of_custody_groups
+    }
+
+    // Returns the count of custody columns this node must sample for block import
+    pub fn custody_columns_count(&self) -> u64 {
+        self.config.sampling_size(self.custody_group_count)
     }
 
     /// Returns the number of libp2p connected peers.
