@@ -1,11 +1,14 @@
 use crate::discovery::enr::PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY;
 use crate::discovery::{peer_id_to_node_id, CombinedKey};
-use crate::{metrics, multiaddr::Multiaddr, types::Subnet, Enr, EnrExt, Gossipsub, PeerId};
+use crate::{
+    metrics, multiaddr::Multiaddr, types::Subnet, Enr, EnrExt, Gossipsub, PeerId, SyncInfo,
+};
 use eip_7594::compute_subnets_for_node;
 use itertools::Itertools as _;
 use peer_info::{ConnectionDirection, PeerConnectionStatus, PeerInfo};
 use score::{PeerAction, ReportSource, Score, ScoreState};
 use slog::{crit, debug, error, trace, warn};
+use ssz::H256;
 use std::net::IpAddr;
 use std::time::Instant;
 use std::{cmp::Ordering, fmt::Display};
@@ -745,6 +748,19 @@ impl PeerDB {
                 enr: Some(enr),
                 seen_address: Multiaddr::empty(),
                 direction: ConnectionDirection::Outgoing,
+            },
+        );
+
+        self.update_sync_status(
+            &peer_id,
+            SyncStatus::Synced {
+                // Fill in mock SyncInfo, only for the peer to return `is_synced() == true`.
+                info: SyncInfo {
+                    head_slot: 0,
+                    head_root: H256::zero(),
+                    finalized_epoch: 0,
+                    finalized_root: H256::zero(),
+                },
             },
         );
 
