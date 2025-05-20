@@ -114,6 +114,8 @@ pub enum NetworkEvent<AppReqId: ReqId, P: Preset> {
     StatusPeer(PeerId),
     NewListenAddr(Multiaddr),
     ZeroListeners,
+    /// A peer has an updated custody group count from MetaData.
+    PeerUpdatedCustodyGroupCount(PeerId),
 }
 
 pub type Gossipsub = gossipsub::Behaviour<SnappyTransform, SubscriptionFilter>;
@@ -1475,7 +1477,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         }
 
         let connection_id = event.conn_id;
-        // The METADATA and PING RPC responses are handled within the behaviour and not propagated
+        // The PING RPC responses are handled within the behaviour and not propagated
         match event.message {
             Err(handler_err) => {
                 match handler_err {
@@ -1679,9 +1681,11 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
                         None
                     }
                     RpcSuccessResponse::MetaData(meta_data) => {
-                        self.peer_manager_mut()
+                        let updated_cgc = self
+                            .peer_manager_mut()
                             .meta_data_response(&peer_id, meta_data);
-                        None
+                        // Send event after calling into peer_manager so the PeerDB is updated.
+                        updated_cgc.then(|| NetworkEvent::PeerUpdatedCustodyGroupCount(peer_id))
                     }
                     /* Network propagated protocols */
                     RpcSuccessResponse::Status(msg) => {
