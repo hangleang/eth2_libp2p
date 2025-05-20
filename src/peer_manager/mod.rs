@@ -716,8 +716,9 @@ impl PeerManager {
     }
 
     /// Received a metadata response from a peer.
-    pub fn meta_data_response(&mut self, peer_id: &PeerId, meta_data: MetaData) {
+    pub fn meta_data_response(&mut self, peer_id: &PeerId, meta_data: MetaData) -> bool {
         let mut invalid_meta_data = false;
+        let mut updated_cgc = false;
 
         if let Some(peer_info) = self.network_globals.peers.write().peer_info_mut(peer_id) {
             if let Some(known_meta_data) = &peer_info.meta_data() {
@@ -736,12 +737,16 @@ impl PeerManager {
                     "peer_id" => %peer_id, "new_seq_no" => meta_data.seq_number());
             }
 
+            let known_cgc = peer_info
+                .meta_data()
+                .and_then(|meta_data| meta_data.custody_group_count());
+
             let custody_group_count_opt = meta_data.custody_group_count();
             peer_info.set_meta_data(meta_data);
 
             if self.network_globals.config.is_peerdas_scheduled() {
-                // Gracefully ignore metadata/v2 peers. Potentially downscore after PeerDAS to
-                // prioritize PeerDAS peers.
+                // Gracefully ignore metadata/v2 peers.
+                // We only send metadata v3 requests when PeerDAS is scheduled
                 if let Some(custody_group_count) = custody_group_count_opt {
                     match self.compute_peer_custody_groups(peer_id, custody_group_count) {
                         Ok(custody_groups) => {
@@ -763,6 +768,8 @@ impl PeerManager {
                                 })
                                 .collect();
                             peer_info.set_custody_subnets(custody_subnets);
+                            updated_cgc =
+                                known_cgc.map_or(true, |known| custody_group_count != known);
                         }
                         Err(err) => {
                             debug!(self.log, "Unable to compute peer custody groups from metadata";
@@ -785,6 +792,8 @@ impl PeerManager {
         if invalid_meta_data {
             self.goodbye_peer(peer_id, GoodbyeReason::Fault, ReportSource::PeerManager)
         }
+
+        updated_cgc
     }
 
     /// Updates the gossipsub scores for all known peers in gossipsub.
@@ -1488,6 +1497,15 @@ impl PeerManager {
     pub fn remove_trusted_peer(&mut self, enr: Enr) {
         self.trusted_peers.remove(&enr);
     }
+
+    #[cfg(test)]
+    fn custody_subnet_count_for_peer(&self, peer_id: &PeerId) -> Option<usize> {
+        self.network_globals
+            .peers
+            .read()
+            .peer_info(peer_id)
+            .map(|peer_info| peer_info.custody_subnets_iter().count())
+    }
 }
 
 enum ConnectingType {
@@ -1508,9 +1526,10 @@ enum ConnectingType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rpc::MetaDataV3;
     use crate::NetworkConfig;
     use slog::{o, Drain};
-    use types::config::Config as ChainConfig;
+    use types::{config::Config as ChainConfig, nonstandard::Phase};
 
     pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
         let decorator = slog_term::TermDecorator::new().build();
@@ -1533,6 +1552,14 @@ mod tests {
         target_peer_count: usize,
     ) -> PeerManager {
         let chain_config = Arc::new(ChainConfig::mainnet());
+        build_peer_manager_with_opts(trusted_peers, target_peer_count, chain_config).await
+    }
+
+    async fn build_peer_manager_with_opts(
+        trusted_peers: Vec<PeerId>,
+        target_peer_count: usize,
+        chain_config: Arc<ChainConfig>,
+    ) -> PeerManager {
         let config = config::Config {
             target_peer_count,
             discovery_enabled: false,
@@ -1892,6 +1919,44 @@ mod tests {
         }
         // Ensure we removed all the peers
         assert!(peers_should_have_removed.is_empty());
+    }
+
+    #[tokio::test]
+    /// Test a metadata response should update custody subnets
+    async fn test_peer_manager_update_custody_subnets() {
+        // PeerDAS is enabled from Fulu.
+        let chain_config = Arc::new(ChainConfig::mainnet().start_and_stay_in(Phase::Fulu));
+        let mut peer_manager = build_peer_manager_with_opts(vec![], 1, chain_config).await;
+        let pubkey = Keypair::generate_secp256k1().public();
+        let peer_id = PeerId::from_public_key(&pubkey);
+        peer_manager.inject_connect_ingoing(
+            &peer_id,
+            Multiaddr::empty().with_p2p(peer_id).unwrap(),
+            None,
+        );
+
+        // A newly connected peer should have no custody subnets before metadata is received.
+        let custody_subnet_count = peer_manager.custody_subnet_count_for_peer(&peer_id);
+        assert_eq!(custody_subnet_count, Some(0));
+
+        // Metadata should update the custody subnets.
+        let peer_cgc = 4;
+        let meta_data = MetaData::V3(MetaDataV3 {
+            seq_number: 0,
+            attnets: Default::default(),
+            syncnets: Default::default(),
+            custody_group_count: peer_cgc,
+        });
+        let cgc_updated = peer_manager.meta_data_response(&peer_id, meta_data.clone());
+        assert!(cgc_updated);
+        let custody_subnet_count = peer_manager.custody_subnet_count_for_peer(&peer_id);
+        assert_eq!(custody_subnet_count, Some(peer_cgc as usize));
+
+        // Make another update and assert that CGC is not updated.
+        let cgc_updated = peer_manager.meta_data_response(&peer_id, meta_data);
+        assert!(!cgc_updated);
+        let custody_subnet_count = peer_manager.custody_subnet_count_for_peer(&peer_id);
+        assert_eq!(custody_subnet_count, Some(peer_cgc as usize));
     }
 
     #[tokio::test]
