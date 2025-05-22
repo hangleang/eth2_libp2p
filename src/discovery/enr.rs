@@ -278,13 +278,10 @@ pub fn build_enr(
 
     builder.add_value::<Bytes>(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield.to_ssz()?.into());
 
-    // only set `csc` if PeerDAS fork epoch has been scheduled
+    // only set `cgc` if PeerDAS fork epoch has been scheduled
     if chain_config.is_peerdas_scheduled() {
-        let custody_group_count = if config.subscribe_all_data_column_subnets {
-            chain_config.number_of_custody_groups
-        } else {
-            chain_config.custody_requirement
-        };
+        let custody_group_count =
+            chain_config.custody_group_count(config.subscribe_all_data_column_subnets);
         builder.add_value(PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, &custody_group_count);
 
         // set the `nfd` field on our ENR

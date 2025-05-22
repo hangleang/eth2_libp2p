@@ -760,6 +760,7 @@ impl PeerDB {
                     head_root: H256::zero(),
                     finalized_epoch: 0,
                     finalized_root: H256::zero(),
+                    earliest_available_slot: Some(0),
                 },
             },
         );

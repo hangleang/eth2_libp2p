@@ -4,9 +4,7 @@ use crate::peer_manager::peerdb::PeerDB;
 use crate::rpc::{MetaData, MetaDataV3};
 use crate::types::{BackFillState, SyncState};
 use crate::{Client, Enr, EnrExt, GossipTopic, Multiaddr, NetworkConfig, PeerId};
-use eip_7594::{
-    compute_columns_for_custody_group, compute_subnets_from_custody_group, get_custody_groups,
-};
+use eip_7594::compute_custody_subnets_and_columns_for_node;
 use helper_functions::misc::compute_subnet_for_data_column_sidecar;
 use parking_lot::RwLock;
 use slog::error;
@@ -15,7 +13,7 @@ use std::sync::Arc;
 use std_ext::ArcExt as _;
 use types::config::Config as ChainConfig;
 use types::fulu::primitives::ColumnIndex;
-use types::phase0::primitives::SubnetId;
+use types::phase0::primitives::{Epoch, SubnetId};
 
 pub struct NetworkGlobals {
     /// Ethereum chain configuration. Immutable after initialization.
@@ -37,10 +35,8 @@ pub struct NetworkGlobals {
     /// The current state of the backfill sync.
     pub backfill_state: RwLock<BackFillState>,
     /// The computed sampling subnets and columns is stored to avoid re-computing.
-    pub sampling_subnets: HashSet<SubnetId>,
-    pub sampling_columns: HashSet<ColumnIndex>,
-    /// Constant custody group count (CGC) set at startup
-    custody_group_count: u64,
+    sampling_subnets: RwLock<HashSet<SubnetId>>,
+    sampling_columns: RwLock<HashSet<ColumnIndex>>,
     /// Target subnet peers.
     pub target_subnet_peers: usize,
     /// Network-related configuration. Immutable after initialization.
@@ -75,23 +71,18 @@ impl NetworkGlobals {
         };
 
         let sampling_size = config.sampling_size(custody_group_count);
-
-        let custody_groups = get_custody_groups(node_id, sampling_size, &config)
-            .expect("should compute custody groups for node");
-
-        let mut sampling_subnets = HashSet::new();
-        for custody_index in &custody_groups {
-            let subnets = compute_subnets_from_custody_group(*custody_index, &config)
-                .expect("should compute custody subnets for node");
-            sampling_subnets.extend(subnets);
-        }
-
-        let mut sampling_columns = HashSet::new();
-        for custody_index in &custody_groups {
-            let columns = compute_columns_for_custody_group(*custody_index, &config)
-                .expect("should compute custody columns for node");
-            sampling_columns.extend(columns);
-        }
+        let (sampling_subnets, sampling_columns) =
+            match compute_custody_subnets_and_columns_for_node(node_id, sampling_size, &config) {
+                Ok((sampling_subnets, sampling_columns)) => (sampling_subnets, sampling_columns),
+                Err(error) => {
+                    error!(
+                        log,
+                        "Failed to compute custody requirements";
+                        "error" => ?error,
+                    );
+                    (HashSet::new(), HashSet::new())
+                }
+            };
 
         NetworkGlobals {
             config: config.clone_arc(),
@@ -108,9 +99,8 @@ impl NetworkGlobals {
             gossipsub_subscriptions: RwLock::new(HashSet::new()),
             sync_state: RwLock::new(SyncState::Stalled),
             backfill_state: RwLock::new(BackFillState::Paused),
-            sampling_subnets,
-            sampling_columns,
-            custody_group_count,
+            sampling_subnets: RwLock::new(sampling_subnets),
+            sampling_columns: RwLock::new(sampling_columns),
             target_subnet_peers,
             network_config,
         }
@@ -132,14 +122,16 @@ impl NetworkGlobals {
         self.listen_multiaddrs.read().clone()
     }
 
-    // Returns true if this node is configured as a PeerDAS supernode
-    pub fn is_supernode(&self) -> bool {
-        self.custody_group_count == self.config.number_of_custody_groups
+    pub fn sampling_subnets(&self) -> HashSet<SubnetId> {
+        self.sampling_subnets.read().clone()
     }
 
-    // Returns the count of custody columns this node must sample for block import
-    pub fn custody_columns_count(&self) -> u64 {
-        self.config.sampling_size(self.custody_group_count)
+    pub fn sampling_columns(&self) -> HashSet<ColumnIndex> {
+        self.sampling_columns.read().clone()
+    }
+
+    pub fn sampling_columns_count(&self) -> usize {
+        self.sampling_columns.read().len()
     }
 
     /// Returns the number of libp2p connected peers.
@@ -184,6 +176,18 @@ impl NetworkGlobals {
             .peer_info(peer_id)
             .map(|info| info.client().clone())
             .unwrap_or_default()
+    }
+
+    pub fn update_custody_requirements(&self, advertise_epoch: Epoch, custody_group_count: u64) {
+        let node_id = self.local_enr().node_id().raw();
+        let sampling_size = self.config.sampling_size(custody_group_count);
+
+        if let Ok((sampling_subnets, sampling_columns)) =
+            compute_custody_subnets_and_columns_for_node(node_id, sampling_size, &self.config)
+        {
+            *self.sampling_subnets.write() = sampling_subnets;
+            *self.sampling_columns.write() = sampling_columns;
+        }
     }
 
     pub fn add_trusted_peer(&self, enr: Enr) {
@@ -242,7 +246,7 @@ impl NetworkGlobals {
             subscribe_all_data_column_subnets: self
                 .network_config
                 .subscribe_all_data_column_subnets,
-            sampling_subnets: &self.sampling_subnets,
+            sampling_subnets: self.sampling_subnets(),
         }
     }
 
@@ -332,7 +336,7 @@ mod test {
             &log,
             config,
         );
-        assert_eq!(globals.sampling_subnets.len(), sampling_size as usize);
+        assert_eq!(globals.sampling_subnets().len(), sampling_size as usize);
     }
 
     #[test]
@@ -356,7 +360,7 @@ mod test {
             &log,
             config,
         );
-        assert_eq!(globals.sampling_subnets.len(), sampling_size as usize);
+        assert_eq!(globals.sampling_subnets().len(), sampling_size as usize);
     }
 
     fn get_metadata(custody_group_count: u64) -> MetaData {

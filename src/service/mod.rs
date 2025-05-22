@@ -213,14 +213,15 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             &log,
         )?;
 
-        // construct the metadata
-        let custody_group_count = chain_config
+        // Construct the metadata
+        let custody_group_count_opt = chain_config
             .is_peerdas_scheduled()
             .then(|| chain_config.custody_group_count(config.subscribe_all_data_column_subnets));
-
-        // Construct the metadata
-        let meta_data =
-            utils::load_or_build_metadata(config.network_dir.as_deref(), custody_group_count, &log);
+        let meta_data = utils::load_or_build_metadata(
+            config.network_dir.as_deref(),
+            custody_group_count_opt,
+            &log,
+        );
         let seq_number = meta_data.seq_number();
         let globals = NetworkGlobals::new(
             chain_config.clone_arc(),
@@ -1107,6 +1108,40 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         self.update_metadata_bitfields();
     }
 
+    pub fn attempt_to_update_custody_group_count(&mut self, custody_group_count: u64) {
+        let Ok(current_custody_group_count) = self
+            .local_enr()
+            .custody_group_count(self.fork_context.chain_config())
+        else {
+            warn!(self.log, "CGC field does not exists in ENR");
+            return;
+        };
+
+        if custody_group_count == current_custody_group_count {
+            return;
+        }
+
+        debug!(
+            self.log,
+            "Advertising custody group count in ENR and Metadata";
+            "cgc" => custody_group_count,
+        );
+        if let Err(e) = self.discovery_mut().update_cgc_enr(custody_group_count) {
+            crit!(self.log, "Could not update CGC in ENR"; "error" => ?e);
+        }
+        // update the local meta data which informs our peers of the update during PINGS
+        self.update_metadata_custody_group_count(custody_group_count);
+    }
+
+    pub fn update_custody_requirements(
+        &mut self,
+        advertise_epoch: Epoch,
+        custody_group_count: u64,
+    ) {
+        self.network_globals
+            .update_custody_requirements(advertise_epoch, custody_group_count);
+    }
+
     /// Attempts to discover new peers for a given subnet. The `min_ttl` gives the time at which we
     /// would like to retain the peers for.
     pub fn discover_subnet_peers(&mut self, subnets_to_discover: Vec<SubnetDiscovery>) {
@@ -1210,6 +1245,24 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         *meta_data_w.attnets_mut() = local_attnets;
         if let Some(syncnets) = meta_data_w.syncnets_mut() {
             *syncnets = local_syncnets;
+        }
+        let seq_number = meta_data_w.seq_number();
+        let meta_data = meta_data_w.clone();
+
+        drop(meta_data_w);
+        self.eth2_rpc_mut().update_seq_number(seq_number);
+        // Save the updated metadata to disk
+        utils::save_metadata_to_disk(self.network_dir.as_deref(), meta_data, &self.log);
+    }
+
+    /// Update the current custody group count in meta data of the node to match the local ENR.
+    fn update_metadata_custody_group_count(&mut self, scheduled_custody_group_count: u64) {
+        // write lock scope
+        let mut meta_data_w = self.network_globals.local_metadata.write();
+
+        *meta_data_w.seq_number_mut() += 1;
+        if let Some(custody_group_count) = meta_data_w.custody_group_count_mut() {
+            *custody_group_count = scheduled_custody_group_count;
         }
         let seq_number = meta_data_w.seq_number();
         let meta_data = meta_data_w.clone();
