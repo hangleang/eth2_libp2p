@@ -19,7 +19,7 @@ use alloy_rlp::bytes::Bytes;
 use anyhow::{anyhow, Error, Result};
 use enr::{
     ATTESTATION_BITFIELD_ENR_KEY, ETH2_ENR_KEY, NEXT_FORK_DIGEST_ENR_KEY,
-    SYNC_COMMITTEE_BITFIELD_ENR_KEY,
+    PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, SYNC_COMMITTEE_BITFIELD_ENR_KEY,
 };
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
@@ -37,7 +37,7 @@ pub use libp2p::{
 };
 use lru::LruCache;
 use slog::{crit, debug, error, info, trace, warn};
-use ssz::SszWrite as _;
+use ssz::SszWrite;
 use std::{
     collections::{HashMap, VecDeque},
     net::{IpAddr, SocketAddr},
@@ -550,6 +550,20 @@ impl Discovery {
             // Data column subnets are computed from node ID. No subnet bitfield in the ENR.
             Subnet::DataColumn(_) => return Ok(()),
         }
+
+        // replace the global version
+        *self.network_globals.local_enr.write() = self.discv5.local_enr();
+
+        // persist modified enr to disk
+        enr::save_enr_to_disk(self.enr_dir.as_deref(), &self.local_enr(), &self.log);
+        Ok(())
+    }
+
+    /// Update the `cgc` field of our local ENR.
+    pub fn update_cgc_enr(&mut self, cgc: u64) -> Result<()> {
+        self.discv5
+            .enr_insert(PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, &cgc)
+            .map_err(|e| anyhow!("{:?}", e))?;
 
         // replace the global version
         *self.network_globals.local_enr.write() = self.discv5.local_enr();
