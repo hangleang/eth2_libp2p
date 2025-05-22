@@ -36,11 +36,11 @@ pub const LIGHT_CLIENT_FINALITY_UPDATE: &str = "light_client_finality_update";
 pub const LIGHT_CLIENT_OPTIMISTIC_UPDATE: &str = "light_client_optimistic_update";
 
 #[derive(Debug)]
-pub struct TopicConfig<'a> {
+pub struct TopicConfig {
     pub enable_light_client_server: bool,
     pub subscribe_all_subnets: bool,
     pub subscribe_all_data_column_subnets: bool,
-    pub sampling_subnets: &'a HashSet<SubnetId>,
+    pub sampling_subnets: HashSet<SubnetId>,
 }
 
 /// Returns all the topics the node should subscribe at `current_phase`
@@ -95,7 +95,7 @@ pub fn core_topics_to_subscribe(
                 topics.push(GossipKind::DataColumnSidecar(column_subnet as SubnetId));
             }
         } else {
-            for column_subnet in opts.sampling_subnets {
+            for column_subnet in &opts.sampling_subnets {
                 topics.push(GossipKind::DataColumnSidecar(*column_subnet));
             }
         }
@@ -136,7 +136,7 @@ pub fn all_topics_at_fork(chain_config: &ChainConfig, current_phase: Phase) -> V
         enable_light_client_server: true,
         subscribe_all_subnets: true,
         subscribe_all_data_column_subnets: true,
-        sampling_subnets: &sampling_subnets,
+        sampling_subnets,
     };
     core_topics_to_subscribe(chain_config, current_phase, &opts)
 }
@@ -517,7 +517,7 @@ mod tests {
         HashSet::new()
     }
 
-    fn get_topic_config(sampling_subnets: &HashSet<SubnetId>) -> TopicConfig {
+    fn get_topic_config(sampling_subnets: HashSet<SubnetId>) -> TopicConfig {
         TopicConfig {
             enable_light_client_server: false,
             subscribe_all_subnets: false,
@@ -530,7 +530,7 @@ mod tests {
     fn base_topics_are_always_active() {
         let config = get_chain_config();
         let s = get_sampling_subnets();
-        let topic_config = get_topic_config(&s);
+        let topic_config = get_topic_config(s);
         for phase in enum_iterator::all() {
             assert!(core_topics_to_subscribe(&config, phase, &topic_config)
                 .contains(&GossipKind::BeaconBlock));
@@ -541,7 +541,7 @@ mod tests {
     fn blobs_are_not_subscribed_in_peerdas() {
         let config = get_chain_config();
         let s = get_sampling_subnets();
-        let topic_config = get_topic_config(&s);
+        let topic_config = get_topic_config(s);
         assert!(
             !core_topics_to_subscribe(&config, Phase::Fulu, &topic_config)
                 .contains(&GossipKind::BlobSidecar(0))
@@ -552,7 +552,7 @@ mod tests {
     fn columns_are_subscribed_in_peerdas() {
         let config = get_chain_config();
         let s = get_sampling_subnets();
-        let mut topic_config = get_topic_config(&s);
+        let mut topic_config = get_topic_config(s);
         topic_config.subscribe_all_data_column_subnets = true;
         assert!(
             core_topics_to_subscribe(&config, Phase::Fulu, &topic_config)
@@ -564,7 +564,7 @@ mod tests {
     fn test_core_topics_to_subscribe() {
         let config = get_chain_config();
         let s = HashSet::from_iter([1, 2].map(|s| s as SubnetId));
-        let mut topic_config = get_topic_config(&s);
+        let mut topic_config = get_topic_config(s.clone());
         topic_config.enable_light_client_server = true;
         let latest_fork = Phase::last().unwrap_or(Phase::Phase0);
         let topics = core_topics_to_subscribe(&config, latest_fork, &topic_config);
