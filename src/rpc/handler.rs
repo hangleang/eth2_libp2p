@@ -12,6 +12,7 @@ use crate::types::ForkContext;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures::SinkExt;
+use helper_functions::misc;
 use libp2p::swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
@@ -878,7 +879,8 @@ where
                 }
             }
             RequestType::BlobsByRange(request) => {
-                let max_requested_blobs = request.max_blobs_requested(&chain_config, phase);
+                let epoch = misc::compute_epoch_at_slot::<P>(request.start_slot);
+                let max_requested_blobs = request.max_blobs_requested(&chain_config, epoch);
                 let max_allowed = chain_config.max_request_blob_sidecars(phase);
                 if max_requested_blobs > max_allowed {
                     self.events_out.push(HandlerEvent::Err(HandlerErr::Inbound {
