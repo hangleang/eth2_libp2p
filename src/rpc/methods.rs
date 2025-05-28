@@ -1,5 +1,4 @@
 //! Available RPC methods types and ids.
-use std::collections::HashSet;
 use std::fmt::Display;
 
 use crate::types::{EnrAttestationBitfield, EnrSyncCommitteeBitfield};
@@ -10,7 +9,7 @@ use ssz::{
     ContiguousList, DynamicList, ReadError, Size, Ssz, SszRead, SszSize, SszWrite, WriteError,
 };
 use std::marker::PhantomData;
-use std::{collections::BTreeMap, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 use strum::IntoStaticStr;
 use try_from_iterator::TryFromIterator as _;
 use typenum::{Unsigned as _, U256};
@@ -371,11 +370,8 @@ pub struct BlobsByRangeRequest {
 }
 
 impl BlobsByRangeRequest {
-    pub fn max_blobs_requested(&self, config: &ChainConfig, phase: Phase) -> u64 {
-        let max_blobs_per_block = phase
-            .max_blobs_per_block(config.fork_epoch(phase), config)
-            .expect("blob schedule is not defined.");
-        self.count.saturating_mul(max_blobs_per_block)
+    pub fn max_blobs_requested(&self, config: &ChainConfig, epoch: Epoch) -> u64 {
+        self.count.saturating_mul(config.max_blobs_per_block(epoch))
     }
 }
 
