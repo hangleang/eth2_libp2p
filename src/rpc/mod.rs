@@ -35,7 +35,7 @@ pub use handler::SubstreamId;
 pub use methods::{
     BlobsByRangeRequest, BlobsByRootRequest, BlocksByRangeRequest, BlocksByRootRequest,
     GoodbyeReason, LightClientBootstrapRequest, ResponseTermination, RpcErrorResponse,
-    StatusMessage,
+    StatusMessage, StatusMessageV1, StatusMessageV2,
 };
 pub use protocol::{Protocol, RPCError};
 

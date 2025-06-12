@@ -75,9 +75,59 @@ impl Display for ErrorType {
 /* Requests */
 
 /// The STATUS request/response handshake message.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum StatusMessage {
+    V1(StatusMessageV1),
+    V2(StatusMessageV2),
+}
+
+impl StatusMessage {
+    pub fn fork_digest(self) -> ForkDigest {
+        match self {
+            Self::V1(status_message) => status_message.fork_digest,
+            Self::V2(status_message) => status_message.fork_digest,
+        }
+    }
+
+    pub fn finalized_root(self) -> H256 {
+        match self {
+            Self::V1(status_message) => status_message.finalized_root,
+            Self::V2(status_message) => status_message.finalized_root,
+        }
+    }
+
+    pub fn finalized_epoch(self) -> Epoch {
+        match self {
+            Self::V1(status_message) => status_message.finalized_epoch,
+            Self::V2(status_message) => status_message.finalized_epoch,
+        }
+    }
+
+    pub fn head_root(self) -> H256 {
+        match self {
+            Self::V1(status_message) => status_message.head_root,
+            Self::V2(status_message) => status_message.head_root,
+        }
+    }
+
+    pub fn head_slot(self) -> Slot {
+        match self {
+            Self::V1(status_message) => status_message.head_slot,
+            Self::V2(status_message) => status_message.head_slot,
+        }
+    }
+
+    pub fn earliest_available_slot(self) -> Option<Slot> {
+        match self {
+            Self::V1(_) => None,
+            Self::V2(status_message) => Some(status_message.earliest_available_slot),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Ssz)]
 #[ssz(derive_hash = false)]
-pub struct StatusMessage {
+pub struct StatusMessageV1 {
     /// The fork version of the chain we are broadcasting.
     pub fork_digest: ForkDigest,
 
@@ -92,6 +142,61 @@ pub struct StatusMessage {
 
     /// The slot associated with the latest block root.
     pub head_slot: Slot,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Ssz)]
+#[ssz(derive_hash = false)]
+pub struct StatusMessageV2 {
+    /// The fork version of the chain we are broadcasting.
+    pub fork_digest: ForkDigest,
+
+    /// Latest finalized root.
+    pub finalized_root: H256,
+
+    /// Latest finalized epoch.
+    pub finalized_epoch: Epoch,
+
+    /// The latest block root.
+    pub head_root: H256,
+
+    /// The slot associated with the latest block root.
+    pub head_slot: Slot,
+
+    /// The slot after which we guarantee to have all the blocks
+    /// and blobs/data columns that we currently advertise.
+    pub earliest_available_slot: Slot,
+}
+
+impl StatusMessage {
+    pub fn status_v1(&self) -> StatusMessageV1 {
+        match &self {
+            Self::V1(status) => status.clone(),
+            Self::V2(status) => StatusMessageV1 {
+                fork_digest: status.fork_digest,
+                finalized_root: status.finalized_root,
+                finalized_epoch: status.finalized_epoch,
+                head_root: status.head_root,
+                head_slot: status.head_slot,
+            },
+        }
+    }
+
+    pub fn status_v2(&self) -> StatusMessageV2 {
+        match &self {
+            Self::V1(status) => StatusMessageV2 {
+                fork_digest: status.fork_digest,
+                finalized_root: status.finalized_root,
+                finalized_epoch: status.finalized_epoch,
+                head_root: status.head_root,
+                head_slot: status.head_slot,
+                // Note: we always produce a V2 message as our local
+                // status message, so this match arm should ideally never
+                // be invoked in lighthouse.
+                earliest_available_slot: 0,
+            },
+            Self::V2(status) => *status,
+        }
+    }
 }
 
 /// The PING request/response message.
@@ -889,7 +994,7 @@ impl std::fmt::Display for RpcErrorResponse {
 
 impl std::fmt::Display for StatusMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Status Message: Fork Digest: {:?}, Finalized Root: {}, Finalized Epoch: {}, Head Root: {}, Head Slot: {}", self.fork_digest, self.finalized_root, self.finalized_epoch, self.head_root, self.head_slot)
+        write!(f, "Status Message: Fork Digest: {:?}, Finalized Root: {}, Finalized Epoch: {}, Head Root: {}, Head Slot: {} Earliest available slot: {:?}", self.fork_digest(), self.finalized_root(), self.finalized_epoch(), self.head_root(), self.head_slot(), self.earliest_available_slot())
     }
 }
 
@@ -1049,11 +1154,26 @@ impl slog::KV for StatusMessage {
         serializer: &mut dyn slog::Serializer,
     ) -> slog::Result {
         use slog::Value;
-        serializer.emit_arguments("fork_digest", &format_args!("{:?}", self.fork_digest))?;
-        Value::serialize(&self.finalized_epoch, record, "finalized_epoch", serializer)?;
-        serializer.emit_arguments("finalized_root", &format_args!("{}", self.finalized_root))?;
-        Value::serialize(&self.head_slot, record, "head_slot", serializer)?;
-        serializer.emit_arguments("head_root", &format_args!("{}", self.head_root))?;
+        serializer.emit_arguments("fork_digest", &format_args!("{:?}", self.fork_digest()))?;
+        Value::serialize(
+            &self.finalized_epoch(),
+            record,
+            "finalized_epoch",
+            serializer,
+        )?;
+        serializer.emit_arguments("finalized_root", &format_args!("{}", self.finalized_root()))?;
+        Value::serialize(&self.head_slot(), record, "head_slot", serializer)?;
+        serializer.emit_arguments("head_root", &format_args!("{}", self.head_root()))?;
+        Value::serialize(
+            &self.earliest_available_slot(),
+            record,
+            "earliest_available_slot",
+            serializer,
+        )?;
+        serializer.emit_arguments(
+            "earliest_available_slot",
+            &format_args!("{:?}", self.earliest_available_slot()),
+        )?;
         slog::Result::Ok(())
     }
 }

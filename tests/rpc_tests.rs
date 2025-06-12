@@ -94,22 +94,22 @@ async fn test_tcp_status_rpc() {
     .await;
 
     // Dummy STATUS RPC message
-    let rpc_request = RequestType::Status(StatusMessage {
+    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
-    });
+    }));
 
     // Dummy STATUS RPC message
-    let rpc_response = Response::Status::<Mainnet>(StatusMessage {
+    let rpc_response = Response::Status::<Mainnet>(StatusMessage::V1(StatusMessageV1 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
-    });
+    }));
 
     // build the sender future
     let sender_future = async {

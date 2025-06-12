@@ -25,6 +25,7 @@ pub struct SyncInfo {
     pub head_root: H256,
     pub finalized_epoch: Epoch,
     pub finalized_root: H256,
+    pub earliest_available_slot: Option<Slot>,
 }
 
 impl std::cmp::PartialEq for SyncStatus {
