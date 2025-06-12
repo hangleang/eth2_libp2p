@@ -39,6 +39,7 @@ use std::num::{NonZeroU8, NonZeroUsize};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+
 use std::time::Duration;
 use std::usize;
 use std_ext::ArcExt as _;
@@ -50,7 +51,7 @@ use types::{
     nonstandard::Phase,
     phase0::{
         consts::AttestationSubnetCount,
-        primitives::{ForkDigest, Slot},
+        primitives::{Epoch, ForkDigest, Slot},
     },
     preset::Preset,
 };
@@ -1157,6 +1158,22 @@ impl<P: Preset> Network<P> {
 
         // update the local reference
         self.enr_fork_id = enr_fork_id;
+    }
+
+    /// Updates the local ENR's "nfd" field to `next_fork_digest`.
+    pub fn update_next_fork_digest(
+        &mut self,
+        next_fork_digest: ForkDigest,
+        next_fork_epoch: Epoch,
+    ) {
+        if let Err(e) = self.discovery_mut().update_enr_nfd(next_fork_digest) {
+            crit!(self.log, "Could not update ENR next fork digest"; "error" => ?e);
+        }
+
+        self.update_fork_version(EnrForkId {
+            next_fork_epoch,
+            ..self.enr_fork_id
+        })
     }
 
     /* Private internal functions */
