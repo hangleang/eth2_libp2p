@@ -232,6 +232,7 @@ pub enum Encoding {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SupportedProtocol {
     StatusV1,
+    StatusV2,
     GoodbyeV1,
     BlocksByRangeV1,
     BlocksByRangeV2,
@@ -255,6 +256,7 @@ impl SupportedProtocol {
     pub fn version_string(&self) -> &'static str {
         match self {
             SupportedProtocol::StatusV1 => "1",
+            SupportedProtocol::StatusV2 => "2",
             SupportedProtocol::GoodbyeV1 => "1",
             SupportedProtocol::BlocksByRangeV1 => "1",
             SupportedProtocol::BlocksByRangeV2 => "2",
@@ -278,6 +280,7 @@ impl SupportedProtocol {
     pub fn protocol(&self) -> Protocol {
         match self {
             SupportedProtocol::StatusV1 => Protocol::Status,
+            SupportedProtocol::StatusV2 => Protocol::Status,
             SupportedProtocol::GoodbyeV1 => Protocol::Goodbye,
             SupportedProtocol::BlocksByRangeV1 => Protocol::BlocksByRange,
             SupportedProtocol::BlocksByRangeV2 => Protocol::BlocksByRange,
@@ -302,6 +305,7 @@ impl SupportedProtocol {
 
     fn currently_supported(fork_context: &Arc<ForkContext>) -> Vec<ProtocolId> {
         let mut supported = vec![
+            ProtocolId::new(Self::StatusV2, Encoding::SSZSnappy),
             ProtocolId::new(Self::StatusV1, Encoding::SSZSnappy),
             ProtocolId::new(Self::GoodbyeV1, Encoding::SSZSnappy),
             // V2 variants have higher preference then V1
@@ -427,7 +431,7 @@ impl ProtocolId {
     pub fn rpc_request_limits(&self, chain_config: &ChainConfig, phase: Phase) -> RpcLimits {
         match self.versioned_protocol.protocol() {
             Protocol::Status => {
-                RpcLimits::new(StatusMessage::SIZE.get(), StatusMessage::SIZE.get())
+                RpcLimits::new(StatusMessageV1::SIZE.get(), StatusMessageV2::SIZE.get())
             }
             Protocol::Goodbye => {
                 RpcLimits::new(GoodbyeReason::SIZE.get(), GoodbyeReason::SIZE.get())
@@ -475,7 +479,7 @@ impl ProtocolId {
     pub fn rpc_response_limits<P: Preset>(&self, fork_context: &ForkContext) -> RpcLimits {
         match self.versioned_protocol.protocol() {
             Protocol::Status => {
-                RpcLimits::new(StatusMessage::SIZE.get(), StatusMessage::SIZE.get())
+                RpcLimits::new(StatusMessageV1::SIZE.get(), StatusMessageV2::SIZE.get())
             }
             Protocol::Goodbye => RpcLimits::new(0, 0), // Goodbye request has no response
             Protocol::BlocksByRange => rpc_block_limits_by_fork(fork_context.current_fork()),
@@ -518,6 +522,7 @@ impl ProtocolId {
             | SupportedProtocol::LightClientFinalityUpdateV1
             | SupportedProtocol::LightClientUpdatesByRangeV1 => true,
             SupportedProtocol::StatusV1
+            | SupportedProtocol::StatusV2
             | SupportedProtocol::BlocksByRootV1
             | SupportedProtocol::BlocksByRangeV1
             | SupportedProtocol::PingV1
@@ -667,7 +672,10 @@ impl<P: Preset> RequestType<P> {
     /// Gives the corresponding `SupportedProtocol` to this request.
     pub fn versioned_protocol(&self) -> SupportedProtocol {
         match self {
-            RequestType::Status(_) => SupportedProtocol::StatusV1,
+            RequestType::Status(req) => match req {
+                StatusMessage::V1(_) => SupportedProtocol::StatusV1,
+                StatusMessage::V2(_) => SupportedProtocol::StatusV2,
+            },
             RequestType::Goodbye(_) => SupportedProtocol::GoodbyeV1,
             RequestType::BlocksByRange(req) => match req {
                 OldBlocksByRangeRequest::V1(_) => SupportedProtocol::BlocksByRangeV1,
@@ -726,10 +734,10 @@ impl<P: Preset> RequestType<P> {
     pub fn supported_protocols(&self) -> Vec<ProtocolId> {
         match self {
             // add more protocols when versions/encodings are supported
-            RequestType::Status(_) => vec![ProtocolId::new(
-                SupportedProtocol::StatusV1,
-                Encoding::SSZSnappy,
-            )],
+            RequestType::Status(_) => vec![
+                ProtocolId::new(SupportedProtocol::StatusV1, Encoding::SSZSnappy),
+                ProtocolId::new(SupportedProtocol::StatusV2, Encoding::SSZSnappy),
+            ],
             RequestType::Goodbye(_) => vec![ProtocolId::new(
                 SupportedProtocol::GoodbyeV1,
                 Encoding::SSZSnappy,
