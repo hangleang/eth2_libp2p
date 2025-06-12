@@ -97,22 +97,22 @@ async fn test_tcp_status_rpc() {
     .await;
 
     // Dummy STATUS RPC message
-    let rpc_request = RequestType::Status(StatusMessage {
+    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
-    });
+    }));
 
     // Dummy STATUS RPC message
-    let rpc_response = Response::Status::<Mainnet>(StatusMessage {
+    let rpc_response = Response::Status::<Mainnet>(StatusMessage::V1(StatusMessageV1 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
-    });
+    }));
 
     // build the sender future
     let sender_future = async {
@@ -1127,22 +1127,22 @@ async fn test_delayed_rpc_response() {
     .await;
 
     // Dummy STATUS RPC message
-    let rpc_request = RequestType::Status(StatusMessage {
+    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
-    });
+    }));
 
     // Dummy STATUS RPC message
-    let rpc_response = Response::Status(StatusMessage {
+    let rpc_response = Response::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
-    });
+    }));
 
     // build the sender future
     let sender_future = async {
@@ -1264,22 +1264,22 @@ async fn test_active_requests() {
     .await;
 
     // Dummy STATUS RPC request.
-    let rpc_request = RequestType::Status(StatusMessage {
+    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
-    });
+    }));
 
     // Dummy STATUS RPC response.
-    let rpc_response = Response::Status(StatusMessage {
+    let rpc_response = Response::Status(StatusMessage::V1(StatusMessageV1 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
-    });
+    }));
 
     // Number of requests.
     const REQUESTS: usize = 10;
