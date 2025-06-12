@@ -41,6 +41,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use typenum::Unsigned as _;
+use types::phase0::primitives::Epoch;
 
 use std::time::Duration;
 use std::usize;
@@ -1166,6 +1167,22 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
 
         // update the local reference
         self.enr_fork_id = enr_fork_id;
+    }
+
+    /// Updates the local ENR's "nfd" field to `next_fork_digest`.
+    pub fn update_next_fork_digest(
+        &mut self,
+        next_fork_digest: ForkDigest,
+        next_fork_epoch: Epoch,
+    ) {
+        if let Err(e) = self.discovery_mut().update_enr_nfd(next_fork_digest) {
+            crit!(self.log, "Could not update ENR next fork digest"; "error" => ?e);
+        }
+
+        self.update_fork_version(EnrForkId {
+            next_fork_epoch,
+            ..self.enr_fork_id
+        })
     }
 
     /* Private internal functions */
