@@ -662,7 +662,7 @@ impl<P: Preset> RequestType<P> {
             }
             RequestType::BlobsByRoot(req) => req.blob_ids.len() as u64,
             RequestType::DataColumnsByRoot(req) => req.max_requested() as u64,
-            RequestType::DataColumnsByRange(req) => req.max_requested::<P>(),
+            RequestType::DataColumnsByRange(req) => req.max_requested(),
             RequestType::Ping(_) => 1,
             RequestType::MetaData(_) => 1,
             RequestType::LightClientBootstrap(_) => 1,

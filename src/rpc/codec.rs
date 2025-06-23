@@ -4,6 +4,7 @@ use crate::rpc::protocol::{
 };
 use crate::rpc::RequestType;
 use crate::types::ForkContext;
+use helper_functions::misc;
 use libp2p::bytes::BufMut;
 use libp2p::bytes::BytesMut;
 use snap::read::FrameDecoder;
@@ -520,122 +521,10 @@ fn context_bytes<P: Preset>(
     // Add the context bytes if required
     if protocol.has_context_bytes() {
         if let RpcResponse::Success(rpc_variant) = resp {
-            match rpc_variant {
-                RpcSuccessResponse::BlocksByRange(ref_box_block)
-                | RpcSuccessResponse::BlocksByRoot(ref_box_block) => {
-                    return match **ref_box_block {
-                        // NOTE: If you are adding another fork type here, be sure to modify the
-                        //       `fork_context.to_context_bytes()` function to support it as well!
-                        SignedBeaconBlock::Fulu { .. } => {
-                            fork_context.to_context_bytes(Phase::Fulu)
-                        }
-                        SignedBeaconBlock::Electra { .. } => {
-                            fork_context.to_context_bytes(Phase::Electra)
-                        }
-                        SignedBeaconBlock::Deneb { .. } => {
-                            fork_context.to_context_bytes(Phase::Deneb)
-                        }
-                        SignedBeaconBlock::Capella { .. } => {
-                            fork_context.to_context_bytes(Phase::Capella)
-                        }
-                        SignedBeaconBlock::Bellatrix { .. } => {
-                            // Bellatrix context being `None` implies that "merge never happened".
-                            fork_context.to_context_bytes(Phase::Bellatrix)
-                        }
-                        SignedBeaconBlock::Altair { .. } => {
-                            // Altair context being `None` implies that "altair never happened".
-                            // This code should be unreachable if altair is disabled since only Version::V1 would be valid in that case.
-                            fork_context.to_context_bytes(Phase::Altair)
-                        }
-                        SignedBeaconBlock::Phase0 { .. } => {
-                            Some(fork_context.genesis_context_bytes())
-                        }
-                    };
-                }
-                RpcSuccessResponse::BlobsByRange(_) | RpcSuccessResponse::BlobsByRoot(_) => {
-                    return fork_context.to_context_bytes(Phase::Deneb);
-                }
-                RpcSuccessResponse::DataColumnsByRoot(_)
-                | RpcSuccessResponse::DataColumnsByRange(_) => {
-                    return fork_context.to_context_bytes(Phase::Fulu);
-                }
-                RpcSuccessResponse::LightClientBootstrap(lc_bootstrap) => {
-                    return match **lc_bootstrap {
-                        LightClientBootstrap::Fulu(_) => fork_context.to_context_bytes(Phase::Fulu),
-                        LightClientBootstrap::Electra(_) => {
-                            fork_context.to_context_bytes(Phase::Electra)
-                        }
-                        LightClientBootstrap::Deneb(_) => {
-                            fork_context.to_context_bytes(Phase::Deneb)
-                        }
-                        LightClientBootstrap::Capella(_) => {
-                            fork_context.to_context_bytes(Phase::Capella)
-                        }
-                        LightClientBootstrap::Altair(_) => {
-                            fork_context.to_context_bytes(Phase::Altair)
-                        }
-                    }
-                }
-                RpcSuccessResponse::LightClientOptimisticUpdate(lc_optimistic_update) => {
-                    return match **lc_optimistic_update {
-                        LightClientOptimisticUpdate::Fulu(_) => {
-                            fork_context.to_context_bytes(Phase::Fulu)
-                        }
-                        LightClientOptimisticUpdate::Electra(_) => {
-                            fork_context.to_context_bytes(Phase::Electra)
-                        }
-                        LightClientOptimisticUpdate::Deneb(_) => {
-                            fork_context.to_context_bytes(Phase::Deneb)
-                        }
-                        LightClientOptimisticUpdate::Capella(_) => {
-                            fork_context.to_context_bytes(Phase::Capella)
-                        }
-                        LightClientOptimisticUpdate::Altair(_) => {
-                            fork_context.to_context_bytes(Phase::Altair)
-                        }
-                    }
-                }
-                RpcSuccessResponse::LightClientFinalityUpdate(lc_finality_update) => {
-                    return match **lc_finality_update {
-                        LightClientFinalityUpdate::Fulu(_) => {
-                            fork_context.to_context_bytes(Phase::Fulu)
-                        }
-                        LightClientFinalityUpdate::Electra(_) => {
-                            fork_context.to_context_bytes(Phase::Electra)
-                        }
-                        LightClientFinalityUpdate::Deneb(_) => {
-                            fork_context.to_context_bytes(Phase::Deneb)
-                        }
-                        LightClientFinalityUpdate::Capella(_) => {
-                            fork_context.to_context_bytes(Phase::Capella)
-                        }
-                        LightClientFinalityUpdate::Altair(_) => {
-                            fork_context.to_context_bytes(Phase::Altair)
-                        }
-                    }
-                }
-                RpcSuccessResponse::LightClientUpdatesByRange(lc_update) => {
-                    return match **lc_update {
-                        LightClientUpdate::Fulu(_) => fork_context.to_context_bytes(Phase::Fulu),
-                        LightClientUpdate::Electra(_) => {
-                            fork_context.to_context_bytes(Phase::Electra)
-                        }
-                        LightClientUpdate::Deneb(_) => fork_context.to_context_bytes(Phase::Deneb),
-                        LightClientUpdate::Capella(_) => {
-                            fork_context.to_context_bytes(Phase::Capella)
-                        }
-                        LightClientUpdate::Altair(_) => {
-                            fork_context.to_context_bytes(Phase::Altair)
-                        }
-                    }
-                }
-                // These will not pass the has_context_bytes() check
-                RpcSuccessResponse::Status(_)
-                | RpcSuccessResponse::Pong(_)
-                | RpcSuccessResponse::MetaData(_) => {
-                    return None;
-                }
-            }
+            return rpc_variant.slot().map(|slot| {
+                let epoch = misc::compute_epoch_at_slot::<P>(slot);
+                fork_context.context_bytes_at_epoch(epoch)
+            });
         }
     }
 

@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use grandine_version::{APPLICATION_NAME, APPLICATION_VERSION};
 use libp2p::identity::Keypair;
 use slog::{debug, warn};
-use ssz::{SszReadDefault, SszWrite};
+use ssz::{SszReadDefault as _, SszWrite as _};
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -283,10 +283,6 @@ pub fn build_enr(
         let custody_group_count =
             chain_config.custody_group_count(config.subscribe_all_data_column_subnets);
         builder.add_value(PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, &custody_group_count);
-
-        // set the `nfd` field on our ENR
-        let next_fork_digest = ForkDigest::default();
-        builder.add_value::<Bytes>(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?.into());
     }
 
     builder

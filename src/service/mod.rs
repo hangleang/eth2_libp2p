@@ -300,18 +300,25 @@ impl<P: Preset> Network<P> {
             // Set up a scoring update interval
             let update_gossipsub_scores = tokio::time::interval(params.decay_interval);
 
-            let current_and_future_forks = enum_iterator::all().into_iter().filter_map(|phase| {
-                if phase >= ctx.fork_context.current_fork() {
-                    ctx.fork_context
-                        .to_context_bytes(phase)
-                        .map(|fork_digest| (phase, fork_digest))
-                } else {
-                    None
-                }
-            });
+            let current_fork_epoch = ctx.fork_context.current_fork_epoch();
+            let current_and_future_forks = ctx
+                .fork_context
+                .all_fork_epochs()
+                .into_iter()
+                .filter_map(|fork_epoch| {
+                    if fork_epoch >= current_fork_epoch {
+                        Some((
+                            fork_epoch,
+                            ctx.fork_context.context_bytes_at_epoch(fork_epoch),
+                        ))
+                    } else {
+                        None
+                    }
+                });
 
             let all_topics_for_forks = current_and_future_forks
-                .map(|(phase, fork_digest)| {
+                .map(|(fork_epoch, fork_digest)| {
+                    let phase = ctx.chain_config.phase_at_epoch(fork_epoch);
                     all_topics_at_fork(&chain_config, phase)
                         .into_iter()
                         .map(|topic| {
@@ -1198,19 +1205,10 @@ impl<P: Preset> Network<P> {
     }
 
     /// Updates the local ENR's "nfd" field to `next_fork_digest`.
-    pub fn update_next_fork_digest(
-        &mut self,
-        next_fork_digest: ForkDigest,
-        next_fork_epoch: Epoch,
-    ) {
+    pub fn update_next_fork_digest(&mut self, next_fork_digest: ForkDigest) {
         if let Err(e) = self.discovery_mut().update_enr_nfd(next_fork_digest) {
             crit!(self.log, "Could not update ENR next fork digest"; "error" => ?e);
         }
-
-        self.update_fork_version(EnrForkId {
-            next_fork_epoch,
-            ..self.enr_fork_id
-        })
     }
 
     /* Private internal functions */
