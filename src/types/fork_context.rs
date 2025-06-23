@@ -7,7 +7,7 @@ use types::{
     config::Config,
     nonstandard::Phase,
     phase0::{
-        consts::GENESIS_EPOCH,
+        consts::{FAR_FUTURE_EPOCH, GENESIS_EPOCH},
         primitives::{Epoch, ForkDigest, Slot, H256},
     },
     preset::Preset,
@@ -132,6 +132,6 @@ impl ForkContext {
             .find_map(|(epoch, fork_digest)| {
                 (*epoch > current_epoch).then_some((*epoch, *fork_digest))
             })
-            .unwrap_or((Epoch::MAX, ForkDigest::default()))
+            .unwrap_or((FAR_FUTURE_EPOCH, ForkDigest::default()))
     }
 }
