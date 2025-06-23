@@ -570,7 +570,7 @@ pub struct DataColumnsByRangeRequest {
 }
 
 impl DataColumnsByRangeRequest {
-    pub fn max_requested<P: Preset>(&self) -> u64 {
+    pub fn max_requested(&self) -> u64 {
         self.count.saturating_mul(self.columns.len() as u64)
     }
 
@@ -981,6 +981,30 @@ impl<P: Preset> RpcSuccessResponse<P> {
             }
             RpcSuccessResponse::LightClientFinalityUpdate(_) => Protocol::LightClientFinalityUpdate,
             RpcSuccessResponse::LightClientUpdatesByRange(_) => Protocol::LightClientUpdatesByRange,
+        }
+    }
+
+    pub fn slot(&self) -> Option<Slot> {
+        match self {
+            RpcSuccessResponse::BlocksByRange(block) | RpcSuccessResponse::BlocksByRoot(block) => {
+                Some(block.message().slot())
+            }
+            RpcSuccessResponse::BlobsByRange(blob) | RpcSuccessResponse::BlobsByRoot(blob) => {
+                Some(blob.signed_block_header.message.slot)
+            }
+            RpcSuccessResponse::DataColumnsByRange(column)
+            | RpcSuccessResponse::DataColumnsByRoot(column) => {
+                Some(column.signed_block_header.message.slot)
+            }
+            RpcSuccessResponse::LightClientBootstrap(b) => Some(b.slot()),
+            RpcSuccessResponse::LightClientOptimisticUpdate(update) => {
+                Some(update.signature_slot())
+            }
+            RpcSuccessResponse::LightClientFinalityUpdate(update) => Some(update.signature_slot()),
+            RpcSuccessResponse::LightClientUpdatesByRange(update) => Some(update.signature_slot()),
+            RpcSuccessResponse::MetaData(_)
+            | RpcSuccessResponse::Status(_)
+            | RpcSuccessResponse::Pong(_) => None,
         }
     }
 }
