@@ -19,6 +19,7 @@ pub struct ForkContext {
     chain_config: Arc<Config>,
     current_fork: RwLock<Phase>,
     current_fork_digest: RwLock<ForkDigest>,
+    next_fork_digest: RwLock<ForkDigest>,
     fork_epoch_to_digest: BTreeMap<Epoch, ForkDigest>,
     digest_to_fork_epoch: HashMap<ForkDigest, Epoch>,
 }
@@ -49,11 +50,16 @@ impl ForkContext {
             .rev()
             .find_map(|(epoch, fork_digest)| (*epoch <= current_epoch).then_some(*fork_digest))
             .unwrap_or_default();
+        let next_fork_digest = fork_epoch_to_digest
+            .iter()
+            .find_map(|(epoch, fork_digest)| (*epoch > current_epoch).then_some(*fork_digest))
+            .unwrap_or_default();
 
         Self {
             chain_config: config.clone(),
             current_fork,
             current_fork_digest: RwLock::new(current_fork_digest),
+            next_fork_digest: RwLock::new(next_fork_digest),
             fork_epoch_to_digest,
             digest_to_fork_epoch,
         }
@@ -92,6 +98,16 @@ impl ForkContext {
     /// Updates the `current_fork_digest` field to a new fork digest.
     pub fn update_current_fork_digest(&self, new_fork_digest: ForkDigest) {
         *self.current_fork_digest.write() = new_fork_digest;
+    }
+
+    /// Returns the `next_fork_digest`.
+    pub fn next_fork_digest(&self) -> ForkDigest {
+        *self.next_fork_digest.read()
+    }
+
+    /// Updates the `next_fork_digest` field to a new fork digest.
+    pub fn update_next_fork_digest(&self, new_fork_digest: ForkDigest) {
+        *self.next_fork_digest.write() = new_fork_digest;
     }
 
     /// Returns the context bytes/fork_digest corresponding to the genesis fork version.
@@ -133,5 +149,34 @@ impl ForkContext {
                 (*epoch > current_epoch).then_some((*epoch, *fork_digest))
             })
             .unwrap_or((FAR_FUTURE_EPOCH, ForkDigest::default()))
+    }
+
+    pub fn fork_digest_at_epoch(&self, epoch: Epoch) -> Option<&ForkDigest> {
+        self.fork_epoch_to_digest.get(&epoch)
+    }
+
+    pub fn context_bytes_at_epoch(&self, epoch: Epoch) -> ForkDigest {
+        self.fork_epoch_to_digest
+            .iter()
+            .rev()
+            .find_map(|(fork_epoch, fork_digest)| (*fork_epoch <= epoch).then_some(*fork_digest))
+            .unwrap_or_default()
+    }
+
+    pub fn all_fork_epochs(&self) -> Vec<Epoch> {
+        self.fork_epoch_to_digest.keys().cloned().collect()
+    }
+
+    pub fn current_fork_epoch(&self) -> Epoch {
+        self.digest_to_fork_epoch
+            .get(&self.current_fork_digest())
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn next_fork_at_slot<P: Preset>(&self, slot: Slot) -> Option<(&Epoch, &ForkDigest)> {
+        self.fork_epoch_to_digest
+            .iter()
+            .find(|(fork_epoch, _)| slot < misc::compute_start_slot_at_epoch::<P>(**fork_epoch))
     }
 }

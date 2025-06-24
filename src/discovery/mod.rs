@@ -613,7 +613,7 @@ impl Discovery {
 
     /// Update the `nfd` field of our local ENR.
     pub fn update_enr_nfd(&mut self, next_fork_digest: ForkDigest) -> Result<()> {
-        info!(self.log, "Update the ENR next fork digest";
+        info!(self.log, "Updating the ENR next fork digest";
             "next_fork_digest" => ?next_fork_digest,
         );
 
@@ -810,8 +810,7 @@ impl Discovery {
     /// Search for a specified number of new peers using the underlying discovery mechanism.
     ///
     /// This can optionally search for peers for a given predicate. Regardless of the predicate
-    /// given, this will only search for peers on the same enr_fork_id and the same next_fork_digest
-    /// as specified in the local ENR.
+    /// given, this will only search for peers on the same enr_fork_id as specified in the local ENR.
     fn start_query(
         &mut self,
         query: QueryType,
@@ -825,14 +824,13 @@ impl Discovery {
                 return;
             }
         };
-        let enr_nfd = self.local_enr().next_fork_digest().unwrap_or_default();
+
         // predicate for finding nodes with a matching fork and valid tcp port
         let eth2_fork_predicate = move |enr: &Enr| {
             // `next_fork_epoch` and `next_fork_version` can be different so that
             // we can connect to peers who aren't compatible with an upcoming fork.
             // `fork_digest` **must** be same.
             enr.eth2().map(|e| e.fork_digest) == Ok(enr_fork_id.fork_digest)
-                && enr.next_fork_digest().unwrap_or_default() == enr_nfd
                 && (enr.tcp4().is_some() || enr.tcp6().is_some())
         };
 

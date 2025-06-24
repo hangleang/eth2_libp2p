@@ -983,6 +983,30 @@ impl<P: Preset> RpcSuccessResponse<P> {
             RpcSuccessResponse::LightClientUpdatesByRange(_) => Protocol::LightClientUpdatesByRange,
         }
     }
+
+    pub fn slot(&self) -> Option<Slot> {
+        match self {
+            RpcSuccessResponse::BlocksByRange(block) | RpcSuccessResponse::BlocksByRoot(block) => {
+                Some(block.message().slot())
+            }
+            RpcSuccessResponse::BlobsByRange(blob) | RpcSuccessResponse::BlobsByRoot(blob) => {
+                Some(blob.signed_block_header.message.slot)
+            }
+            RpcSuccessResponse::DataColumnsByRange(column)
+            | RpcSuccessResponse::DataColumnsByRoot(column) => {
+                Some(column.signed_block_header.message.slot)
+            }
+            RpcSuccessResponse::LightClientBootstrap(b) => Some(b.slot()),
+            RpcSuccessResponse::LightClientOptimisticUpdate(update) => {
+                Some(update.signature_slot())
+            }
+            RpcSuccessResponse::LightClientFinalityUpdate(update) => Some(update.signature_slot()),
+            RpcSuccessResponse::LightClientUpdatesByRange(update) => Some(update.signature_slot()),
+            RpcSuccessResponse::MetaData(_)
+            | RpcSuccessResponse::Status(_)
+            | RpcSuccessResponse::Pong(_) => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RpcErrorResponse {
