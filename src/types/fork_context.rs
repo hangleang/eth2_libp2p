@@ -45,11 +45,7 @@ impl ForkContext {
         let digest_to_fork_epoch = fork_epoch_to_digest.iter().map(|(k, v)| (*v, *k)).collect();
         let current_fork = RwLock::new(config.phase_at_slot::<P>(current_slot));
         let current_epoch = misc::compute_epoch_at_slot::<P>(current_slot);
-        let current_fork_digest = fork_epoch_to_digest
-            .iter()
-            .rev()
-            .find_map(|(epoch, fork_digest)| (*epoch <= current_epoch).then_some(*fork_digest))
-            .unwrap_or_default();
+        let current_fork_digest = Self::digest_at_epoch(&fork_epoch_to_digest, current_epoch);
         let next_fork_digest = fork_epoch_to_digest
             .iter()
             .find_map(|(epoch, fork_digest)| (*epoch > current_epoch).then_some(*fork_digest))
@@ -156,11 +152,7 @@ impl ForkContext {
     }
 
     pub fn context_bytes_at_epoch(&self, epoch: Epoch) -> ForkDigest {
-        self.fork_epoch_to_digest
-            .iter()
-            .rev()
-            .find_map(|(fork_epoch, fork_digest)| (*fork_epoch <= epoch).then_some(*fork_digest))
-            .unwrap_or_default()
+        Self::digest_at_epoch(&self.fork_epoch_to_digest, epoch)
     }
 
     pub fn all_fork_epochs(&self) -> Vec<Epoch> {
@@ -178,5 +170,13 @@ impl ForkContext {
         self.fork_epoch_to_digest
             .iter()
             .find(|(fork_epoch, _)| slot < misc::compute_start_slot_at_epoch::<P>(**fork_epoch))
+    }
+
+    fn digest_at_epoch(fork_epoch_to_digest: &BTreeMap<Epoch, ForkDigest>, epoch: Epoch) -> ForkDigest {
+        fork_epoch_to_digest
+            .iter()
+            .rev()
+            .find_map(|(fork_epoch, fork_digest)| (*fork_epoch <= epoch).then_some(*fork_digest))
+            .unwrap_or_default()
     }
 }
