@@ -1127,21 +1127,23 @@ async fn test_delayed_rpc_response() {
     .await;
 
     // Dummy STATUS RPC message
-    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
+    let rpc_request = RequestType::Status(StatusMessage::V2(StatusMessageV2 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
+        earliest_available_slot: 0,
     }));
 
     // Dummy STATUS RPC message
-    let rpc_response = Response::Status(StatusMessage::V1(StatusMessageV1 {
+    let rpc_response = Response::Status(StatusMessage::V2(StatusMessageV2 {
         fork_digest: H32::default(),
         finalized_root: H256::default(),
         finalized_epoch: 1,
         head_root: H256::default(),
         head_slot: 1,
+        earliest_available_slot: 0,
     }));
 
     // build the sender future
