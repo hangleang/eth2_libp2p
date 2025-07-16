@@ -2,6 +2,7 @@
 use common::Protocol;
 use eth2_libp2p::rpc::{methods::*, RequestType};
 use eth2_libp2p::{service::api_types::AppRequestId, NetworkEvent, ReportSource, Response};
+use helper_functions::misc;
 use slog::{debug, error, warn, Level};
 use ssz::{ByteList, ContiguousList, SszReadDefault as _, SszWrite as _};
 use std::sync::Arc;
@@ -28,7 +29,7 @@ mod common;
 mod factory;
 
 /// Bellatrix block with length < max_rpc_size.
-fn bellatrix_block_small<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
+fn bellatrix_block_small<P: Preset>(config: &Config) -> BellatrixSignedBeaconBlock<P> {
     let tx = ByteList::<P::MaxBytesPerTransaction>::from_ssz_default([0; 1024]).unwrap();
     let txs = Arc::new(ContiguousList::try_from_iter(std::iter::repeat_n(tx, 5000)).unwrap());
 
@@ -41,6 +42,7 @@ fn bellatrix_block_small<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
                 },
                 ..BellatrixBeaconBlockBody::default()
             },
+            slot: misc::compute_start_slot_at_epoch::<P>(config.bellatrix_fork_epoch),
             ..BellatrixBeaconBlock::default()
         },
         ..BellatrixSignedBeaconBlock::default()
@@ -53,7 +55,7 @@ fn bellatrix_block_small<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
 /// Bellatrix block with length > MAX_RPC_SIZE.
 /// The max limit for a merge block is in the order of ~16GiB which wouldn't fit in memory.
 /// Hence, we generate a merge block just greater than `MAX_RPC_SIZE` to test rejection on the rpc layer.
-fn bellatrix_block_large<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
+fn bellatrix_block_large<P: Preset>(config: &Config) -> BellatrixSignedBeaconBlock<P> {
     let tx = ByteList::<P::MaxBytesPerTransaction>::from_ssz_default([0; 1024]).unwrap();
     let txs = Arc::new(ContiguousList::try_from_iter(std::iter::repeat_n(tx, 100000)).unwrap());
 
@@ -66,6 +68,7 @@ fn bellatrix_block_large<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
                 },
                 ..BellatrixBeaconBlockBody::default()
             },
+            slot: misc::compute_start_slot_at_epoch::<P>(config.bellatrix_fork_epoch),
             ..BellatrixBeaconBlock::default()
         },
         ..BellatrixSignedBeaconBlock::default()
@@ -97,21 +100,23 @@ async fn test_tcp_status_rpc() {
     .await;
 
     // Dummy STATUS RPC message
-    let rpc_request = RequestType::Status(StatusMessage::V1(StatusMessageV1 {
+    let rpc_request = RequestType::Status(StatusMessage::V2(StatusMessageV2 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
+        earliest_available_slot: 0,
     }));
 
     // Dummy STATUS RPC message
-    let rpc_response = Response::Status::<Mainnet>(StatusMessage::V1(StatusMessageV1 {
+    let rpc_response = Response::Status::<Mainnet>(StatusMessage::V2(StatusMessageV2 {
         fork_digest: ForkDigest::zero(),
         finalized_root: H256::zero(),
         finalized_epoch: 1,
         head_root: H256::zero(),
         head_slot: 1,
+        earliest_available_slot: 0,
     }));
 
     // build the sender future
@@ -181,6 +186,7 @@ async fn test_tcp_blocks_by_range_chunked_rpc() {
     let messages_to_send = 6;
 
     let log = common::build_log(log_level, enable_logging);
+    let config = Arc::new(Config::mainnet().rapid_upgrade());
 
     // get sender/receiver
     let (mut sender, mut receiver) = common::build_node_pair::<Mainnet>(
@@ -196,7 +202,7 @@ async fn test_tcp_blocks_by_range_chunked_rpc() {
     // BlocksByRange Request
     let rpc_request =
         RequestType::BlocksByRange(OldBlocksByRangeRequest::V2(OldBlocksByRangeRequestV2 {
-            start_slot: 0,
+            start_slot: misc::compute_start_slot_at_epoch::<Mainnet>(config.deneb_fork_epoch),
             count: messages_to_send,
             step: 1,
         }));
@@ -205,9 +211,9 @@ async fn test_tcp_blocks_by_range_chunked_rpc() {
     let signed_full_block = factory::full_phase0_signed_beacon_block().into();
     let rpc_response_base = Response::BlocksByRange(Some(Arc::new(signed_full_block)));
 
-    let signed_full_block = factory::full_altair_signed_beacon_block().into();
+    let signed_full_block = factory::full_altair_signed_beacon_block(&config).into();
     let rpc_response_altair = Response::BlocksByRange(Some(Arc::new(signed_full_block)));
-    let signed_full_block = bellatrix_block_small().into();
+    let signed_full_block = bellatrix_block_small(&config).into();
     let rpc_response_merge_small = Response::BlocksByRange(Some(Arc::new(signed_full_block)));
 
     // keep count of the number of messages received
@@ -319,6 +325,7 @@ async fn test_blobs_by_range_chunked_rpc() {
     let messages_to_send = 34;
 
     let log = common::build_log(log_level, enable_logging);
+    let config = Arc::new(Config::mainnet().rapid_upgrade());
 
     let (mut sender, mut receiver) = common::build_node_pair::<Mainnet>(
         &Config::mainnet().rapid_upgrade().into(),
@@ -331,14 +338,15 @@ async fn test_blobs_by_range_chunked_rpc() {
     .await;
 
     // BlobsByRange Request
+    let deneb_slot = misc::compute_start_slot_at_epoch::<Mainnet>(config.deneb_fork_epoch);
     let rpc_request = RequestType::BlobsByRange(BlobsByRangeRequest {
-        start_slot: 0,
+        start_slot: deneb_slot,
         count: slot_count,
     });
 
     // BlocksByRange Response
-    let blob = BlobSidecar::<Mainnet>::default();
-
+    let mut blob = BlobSidecar::<Mainnet>::default();
+    blob.signed_block_header.message.slot = deneb_slot;
     let rpc_response = Response::BlobsByRange(Some(Arc::new(blob)));
 
     // keep count of the number of messages received
@@ -432,6 +440,7 @@ async fn test_tcp_blocks_by_range_over_limit() {
     let log_level = Level::Debug;
     let enable_logging = false;
 
+    let config = Arc::new(Config::mainnet().rapid_upgrade());
     let messages_to_send = 5;
 
     // BlocksByRange Request
@@ -444,7 +453,7 @@ async fn test_tcp_blocks_by_range_over_limit() {
 
     let log = common::build_log(log_level, enable_logging);
     let (mut sender, mut receiver) = common::build_node_pair::<Mainnet>(
-        &Config::mainnet().rapid_upgrade().into(),
+        &config,
         &log,
         Phase::Bellatrix,
         Protocol::Tcp,
@@ -454,7 +463,7 @@ async fn test_tcp_blocks_by_range_over_limit() {
     .await;
 
     // BlocksByRange Response
-    let signed_full_block = bellatrix_block_large().into();
+    let signed_full_block = bellatrix_block_large(&config).into();
     let rpc_response_merge_large = Response::BlocksByRange(Some(Arc::new(signed_full_block)));
     let request_id = AppRequestId::Application(messages_to_send as usize);
 
@@ -793,9 +802,9 @@ async fn test_tcp_blocks_by_root_chunked_rpc() {
     let signed_full_block = factory::full_phase0_signed_beacon_block().into();
     let rpc_response_base = Response::BlocksByRoot(Some(Arc::new(signed_full_block)));
 
-    let signed_full_block = factory::full_altair_signed_beacon_block().into();
+    let signed_full_block = factory::full_altair_signed_beacon_block(&config).into();
     let rpc_response_altair = Response::BlocksByRoot(Some(Arc::new(signed_full_block)));
-    let signed_full_block = bellatrix_block_small::<Mainnet>().into();
+    let signed_full_block = bellatrix_block_small::<Mainnet>(&config).into();
     let rpc_response_merge_small = Response::BlocksByRoot(Some(Arc::new(signed_full_block)));
 
     // keep count of the number of messages received

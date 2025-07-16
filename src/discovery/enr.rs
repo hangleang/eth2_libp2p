@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use grandine_version::{APPLICATION_NAME, APPLICATION_VERSION};
 use libp2p::identity::Keypair;
 use slog::{debug, warn};
-use ssz::{SszReadDefault as _, SszWrite as _};
+use ssz::{SszReadDefault as _, SszWrite};
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -172,13 +172,20 @@ pub fn build_or_load_enr<P: Preset>(
     local_key: Keypair,
     config: &NetworkConfig,
     enr_fork_id: &EnrForkId,
+    next_fork_digest: ForkDigest,
     log: &slog::Logger,
 ) -> Result<Enr> {
     // Build the local ENR.
     // Note: Discovery should update the ENR record's IP to the external IP as seen by the
     // majority of our peers, if the CLI doesn't expressly forbid it.
     let enr_key = CombinedKey::from_libp2p(local_key)?;
-    let mut local_enr = build_enr(chain_config, &enr_key, config, enr_fork_id)?;
+    let mut local_enr = build_enr(
+        chain_config,
+        &enr_key,
+        config,
+        enr_fork_id,
+        next_fork_digest,
+    )?;
 
     use_or_load_enr(&enr_key, &mut local_enr, config, log)?;
     Ok(local_enr)
@@ -190,6 +197,7 @@ pub fn build_enr(
     enr_key: &CombinedKey,
     config: &NetworkConfig,
     enr_fork_id: &EnrForkId,
+    next_fork_digest: ForkDigest,
 ) -> Result<Enr> {
     let mut builder = discv5::enr::Enr::builder();
     let (maybe_ipv4_address, maybe_ipv6_address) = &config.enr_address;
@@ -278,11 +286,12 @@ pub fn build_enr(
 
     builder.add_value::<Bytes>(SYNC_COMMITTEE_BITFIELD_ENR_KEY, &bitfield.to_ssz()?.into());
 
-    // only set `cgc` if PeerDAS fork epoch has been scheduled
+    // only set `cgc` and `nfd` if PeerDAS fork (Fulu) epoch has been scheduled
     if chain_config.is_peerdas_scheduled() {
         let custody_group_count =
             chain_config.custody_group_count(config.subscribe_all_data_column_subnets);
         builder.add_value(PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, &custody_group_count);
+        builder.add_value(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?);
     }
 
     builder
@@ -357,6 +366,8 @@ mod test {
     use super::*;
     use crate::config::Config as NetworkConfig;
 
+    use types::phase0::primitives::ForkDigest;
+
     fn make_fulu_config() -> ChainConfig {
         let mut chain_config = ChainConfig::mainnet();
         chain_config.fulu_fork_epoch = 10;
@@ -370,7 +381,14 @@ mod test {
         let keypair = libp2p::identity::secp256k1::Keypair::generate();
         let enr_key = CombinedKey::from_secp256k1(&keypair);
         let enr_fork_id = EnrForkId::default();
-        let enr = build_enr(chain_config, &enr_key, &config, &enr_fork_id).unwrap();
+        let enr = build_enr(
+            chain_config,
+            &enr_key,
+            &config,
+            &enr_fork_id,
+            ForkDigest::default(),
+        )
+        .unwrap();
         (enr, enr_key)
     }
 
