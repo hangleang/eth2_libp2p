@@ -982,7 +982,7 @@ mod tests {
         );
         assert_eq!(
             SIGNED_BEACON_BLOCK_ALTAIR_MAX,
-            factory::full_altair_signed_beacon_block::<Mainnet>()
+            factory::full_altair_signed_beacon_block::<Mainnet>(&config)
                 .to_ssz()
                 .unwrap()
                 .len(),

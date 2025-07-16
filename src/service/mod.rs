@@ -210,6 +210,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
             local_keypair.clone(),
             &config,
             &ctx.enr_fork_id,
+            ctx.fork_context.next_fork_digest(),
             &log,
         )?;
 

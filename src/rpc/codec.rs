@@ -1097,8 +1097,10 @@ mod tests {
     fn phase0_block<P: Preset>() -> SignedBeaconBlock<P> {
         factory::full_phase0_signed_beacon_block().into()
     }
-    fn altair_block<P: Preset>() -> SignedBeaconBlock<P> {
-        factory::full_altair_signed_beacon_block().into()
+    fn altair_block<P: Preset>(config: &Config) -> SignedBeaconBlock<P> {
+        // The context bytes are now derived from the block epoch, so we need to have the slot set
+        // here.
+        factory::full_altair_signed_beacon_block(config).into()
     }
 
     /// Smallest sized block across all current forks. Useful for testing
@@ -1107,16 +1109,28 @@ mod tests {
         factory::empty_phase0_signed_beacon_block().into()
     }
 
-    fn empty_blob_sidecar<P: Preset>() -> Arc<BlobSidecar<P>> {
-        Arc::new(BlobSidecar::default())
+    fn empty_blob_sidecar<P: Preset>(config: &Config) -> Arc<BlobSidecar<P>> {
+        // The context bytes are now derived from the block epoch, so we need to have the slot set
+        // here.
+        let mut blob_sidecar = BlobSidecar::default();
+        blob_sidecar.signed_block_header.message.slot =
+            misc::compute_start_slot_at_epoch::<P>(config.deneb_fork_epoch);
+        Arc::new(blob_sidecar)
     }
 
-    fn empty_data_column_sidecar<P: Preset>() -> Arc<DataColumnSidecar<P>> {
-        Arc::new(DataColumnSidecar::default())
+    fn empty_data_column_sidecar<P: Preset>(config: &Config) -> Arc<DataColumnSidecar<P>> {
+        // The context bytes are now derived from the block epoch, so we need to have the slot set
+        // here.
+        let mut data_column_sidecar = DataColumnSidecar::default();
+        data_column_sidecar.signed_block_header.message.slot =
+            misc::compute_start_slot_at_epoch::<P>(config.fulu_fork_epoch);
+        Arc::new(data_column_sidecar)
     }
 
     /// Bellatrix block with length < max_rpc_size.
-    fn bellatrix_block_small<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
+    fn bellatrix_block_small<P: Preset>(config: &Config) -> BellatrixSignedBeaconBlock<P> {
+        // The context bytes are now derived from the block epoch, so we need to have the slot set
+        // here.
         let tx = ByteList::<P::MaxBytesPerTransaction>::from_ssz_default([0; 1024]).unwrap();
         let txs = Arc::new(ContiguousList::try_from_iter(std::iter::repeat_n(tx, 5000)).unwrap());
 
@@ -1129,6 +1143,7 @@ mod tests {
                     },
                     ..BellatrixBeaconBlockBody::default()
                 },
+                slot: misc::compute_start_slot_at_epoch::<P>(config.bellatrix_fork_epoch),
                 ..BellatrixBeaconBlock::default()
             },
             ..BellatrixSignedBeaconBlock::default()
@@ -1141,7 +1156,9 @@ mod tests {
     /// Bellatrix block with length > MAX_RPC_SIZE.
     /// The max limit for a merge block is in the order of ~16GiB which wouldn't fit in memory.
     /// Hence, we generate a merge block just greater than `MAX_RPC_SIZE` to test rejection on the rpc layer.
-    fn bellatrix_block_large<P: Preset>() -> BellatrixSignedBeaconBlock<P> {
+    fn bellatrix_block_large<P: Preset>(config: &Config) -> BellatrixSignedBeaconBlock<P> {
+        // The context bytes are now derived from the block epoch, so we need to have the slot set
+        // here.
         let tx = ByteList::<P::MaxBytesPerTransaction>::from_ssz_default([0; 1024]).unwrap();
         let txs = Arc::new(ContiguousList::try_from_iter(std::iter::repeat_n(tx, 100000)).unwrap());
 
@@ -1154,6 +1171,7 @@ mod tests {
                     },
                     ..BellatrixBeaconBlockBody::default()
                 },
+                slot: misc::compute_start_slot_at_epoch::<P>(config.bellatrix_fork_epoch),
                 ..BellatrixBeaconBlock::default()
             },
             ..BellatrixSignedBeaconBlock::default()
@@ -1480,7 +1498,7 @@ mod tests {
                     &config,
                     SupportedProtocol::BlocksByRangeV1,
                     RpcResponse::Success(RpcSuccessResponse::BlocksByRange(Arc::new(
-                        altair_block()
+                        altair_block(&config)
                     ))),
                     Phase::Altair,
                 )
@@ -1509,9 +1527,9 @@ mod tests {
                 encode_then_decode_response::<Mainnet>(
                     &config,
                     SupportedProtocol::BlocksByRootV1,
-                    RpcResponse::Success(RpcSuccessResponse::BlocksByRoot(
-                        Arc::new(altair_block())
-                    )),
+                    RpcResponse::Success(RpcSuccessResponse::BlocksByRoot(Arc::new(altair_block(
+                        &config
+                    )))),
                     Phase::Altair,
                 )
                 .unwrap_err(),
@@ -1556,60 +1574,78 @@ mod tests {
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRangeV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                    &config
+                ))),
                 Phase::Deneb,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRangeV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                    &config
+                ))),
                 Phase::Electra,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRangeV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                    &config
+                ))),
                 Phase::Fulu,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRange(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRootV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(&config))),
                 Phase::Deneb,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRootV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(&config))),
                 Phase::Electra,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlobsByRootV1,
-                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar())),
+                RpcResponse::Success(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(&config))),
                 Phase::Fulu,
             ),
-            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar()))),
+            Ok(Some(RpcSuccessResponse::BlobsByRoot(empty_blob_sidecar(
+                &config
+            )))),
         );
 
         assert_eq!(
@@ -1617,12 +1653,12 @@ mod tests {
                 &config,
                 SupportedProtocol::DataColumnsByRangeV1,
                 RpcResponse::Success(RpcSuccessResponse::DataColumnsByRange(
-                    empty_data_column_sidecar()
+                    empty_data_column_sidecar(&config)
                 )),
                 Phase::Fulu,
             ),
             Ok(Some(RpcSuccessResponse::DataColumnsByRange(
-                empty_data_column_sidecar()
+                empty_data_column_sidecar(&config)
             ))),
         );
 
@@ -1631,12 +1667,12 @@ mod tests {
                 &config,
                 SupportedProtocol::DataColumnsByRangeV1,
                 RpcResponse::Success(RpcSuccessResponse::DataColumnsByRange(
-                    empty_data_column_sidecar()
+                    empty_data_column_sidecar(&config)
                 )),
                 Phase::Fulu,
             ),
             Ok(Some(RpcSuccessResponse::DataColumnsByRange(
-                empty_data_column_sidecar()
+                empty_data_column_sidecar(&config)
             ))),
         );
 
@@ -1645,12 +1681,12 @@ mod tests {
                 &config,
                 SupportedProtocol::DataColumnsByRootV1,
                 RpcResponse::Success(RpcSuccessResponse::DataColumnsByRoot(
-                    empty_data_column_sidecar()
+                    empty_data_column_sidecar(&config)
                 )),
                 Phase::Fulu,
             ),
             Ok(Some(RpcSuccessResponse::DataColumnsByRoot(
-                empty_data_column_sidecar()
+                empty_data_column_sidecar(&config)
             ))),
         );
 
@@ -1659,12 +1695,12 @@ mod tests {
                 &config,
                 SupportedProtocol::DataColumnsByRootV1,
                 RpcResponse::Success(RpcSuccessResponse::DataColumnsByRoot(
-                    empty_data_column_sidecar()
+                    empty_data_column_sidecar(&config)
                 )),
                 Phase::Fulu,
             ),
             Ok(Some(RpcSuccessResponse::DataColumnsByRoot(
-                empty_data_column_sidecar()
+                empty_data_column_sidecar(&config)
             ))),
         );
     }
@@ -1709,16 +1745,18 @@ mod tests {
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlocksByRangeV2,
-                RpcResponse::Success(RpcSuccessResponse::BlocksByRange(Arc::new(altair_block()))),
+                RpcResponse::Success(RpcSuccessResponse::BlocksByRange(Arc::new(altair_block(
+                    &config
+                )))),
                 Phase::Altair,
             ),
             Ok(Some(RpcSuccessResponse::BlocksByRange(Arc::new(
-                altair_block()
+                altair_block(&config)
             ))))
         );
 
-        let bellatrix_block_small = bellatrix_block_small::<Mainnet>();
-        let bellatrix_block_large = bellatrix_block_large::<Mainnet>();
+        let bellatrix_block_small = bellatrix_block_small::<Mainnet>(&config);
+        let bellatrix_block_large = bellatrix_block_large::<Mainnet>(&config);
 
         assert_eq!(
             encode_then_decode_response::<Mainnet>(
@@ -1790,11 +1828,13 @@ mod tests {
             encode_then_decode_response::<Mainnet>(
                 &config,
                 SupportedProtocol::BlocksByRangeV2,
-                RpcResponse::Success(RpcSuccessResponse::BlocksByRange(Arc::new(altair_block()))),
+                RpcResponse::Success(RpcSuccessResponse::BlocksByRange(Arc::new(altair_block(
+                    &config
+                )))),
                 Phase::Altair,
             ),
             Ok(Some(RpcSuccessResponse::BlocksByRange(Arc::new(
-                altair_block()
+                altair_block(&config)
             ))))
         );
 
@@ -2241,7 +2281,7 @@ mod tests {
         let malicious_padding: &'static [u8] = b"\xFE\x00\x00\x00";
 
         // Full altair block is 157916 bytes uncompressed. `max_compressed_len` is 32 + 157916 + 157916/6 = 184267.
-        let block_message_bytes = altair_block::<Mainnet>().to_ssz().unwrap();
+        let block_message_bytes = altair_block::<Mainnet>(&config).to_ssz().unwrap();
 
         assert_eq!(block_message_bytes.len(), 157916);
         assert_eq!(
@@ -2273,11 +2313,11 @@ mod tests {
             dst.extend_from_slice(malicious_padding);
         }
 
-        // Insert payload (8103 bytes compressed)
+        // Insert payload (8102 bytes compressed)
         let mut writer = FrameEncoder::new(Vec::new());
         writer.write_all(&block_message_bytes).unwrap();
         writer.flush().unwrap();
-        assert_eq!(writer.get_ref().len(), 8103);
+        assert_eq!(writer.get_ref().len(), 8102);
         dst.extend_from_slice(writer.get_ref());
 
         // 10 (for stream identifier) + 176156 + 8103 = 184269 > `max_compressed_len`. Hence, decoding should fail with `InvalidData`.

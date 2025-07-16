@@ -618,7 +618,9 @@ impl Discovery {
         );
 
         self.discv5
-            .enr_insert::<Bytes>(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?.into())?;
+            .enr_insert::<Bytes>(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?.into())
+            .map_err(|e| anyhow!("{:?}", e))?;
+
         // replace the global version with discovery version
         *self.network_globals.local_enr.write() = self.discv5.local_enr();
 
@@ -1249,7 +1251,14 @@ mod tests {
         config.set_listening_addr(crate::ListenAddress::unused_v4_ports());
         let config = Arc::new(config);
         let enr_key: CombinedKey = CombinedKey::from_secp256k1(&keypair);
-        let enr: Enr = build_enr(&chain_config, &enr_key, &config, &EnrForkId::default()).unwrap();
+        let enr: Enr = build_enr(
+            &chain_config,
+            &enr_key,
+            &config,
+            &EnrForkId::default(),
+            ForkDigest::default(),
+        )
+        .unwrap();
         let log = build_log(slog::Level::Debug, false);
         let globals = NetworkGlobals::new(
             chain_config.clone_arc(),
