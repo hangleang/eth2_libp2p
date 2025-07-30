@@ -41,7 +41,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use typenum::Unsigned as _;
-use types::phase0::primitives::Epoch;
 
 use std::time::Duration;
 use std::usize;
@@ -186,6 +185,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         chain_config: Arc<ChainConfig>,
         executor: task_executor::TaskExecutor,
         mut ctx: ServiceContext<'_>,
+        custody_group_count: u64,
         log: &slog::Logger,
     ) -> Result<(Self, Arc<NetworkGlobals>)> {
         let log = log.new(o!("service"=> "libp2p"));
@@ -215,12 +215,12 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         )?;
 
         // Construct the metadata
-        let custody_group_count_opt = chain_config
+        let custody_group_count_metadata = chain_config
             .is_peerdas_scheduled()
-            .then(|| chain_config.custody_group_count(config.subscribe_all_data_column_subnets));
+            .then_some(custody_group_count);
         let meta_data = utils::load_or_build_metadata(
             config.network_dir.as_deref(),
-            custody_group_count_opt,
+            custody_group_count_metadata,
             &log,
         );
         let seq_number = meta_data.seq_number();
@@ -822,6 +822,17 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         }
     }
 
+    /// Subscribe to all data columns determined by the cgc.
+    pub fn subscribe_new_data_column_subnets(&mut self, custody_column_count: u64) {
+        self.network_globals
+            .update_data_column_subnets(custody_column_count);
+
+        for column in self.network_globals.sampling_subnets() {
+            let kind = GossipKind::DataColumnSidecar(column);
+            self.subscribe_kind(kind);
+        }
+    }
+
     /// Returns the scoring parameters for a topic if set.
     pub fn get_topic_params(&self, topic: GossipTopic) -> Option<&TopicScoreParams> {
         self.swarm
@@ -1116,38 +1127,13 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
         self.update_metadata_bitfields();
     }
 
-    pub fn attempt_to_update_custody_group_count(&mut self, custody_group_count: u64) {
-        let Ok(current_custody_group_count) = self
-            .local_enr()
-            .custody_group_count(self.fork_context.chain_config())
-        else {
-            warn!(self.log, "CGC field does not exists in ENR");
-            return;
-        };
-
-        if custody_group_count == current_custody_group_count {
-            return;
-        }
-
-        debug!(
-            self.log,
-            "Advertising custody group count in ENR and Metadata";
-            "cgc" => custody_group_count,
-        );
-        if let Err(e) = self.discovery_mut().update_cgc_enr(custody_group_count) {
-            crit!(self.log, "Could not update CGC in ENR"; "error" => ?e);
+    /// Updates the cgc value in the ENR.
+    pub fn update_enr_cgc(&mut self, new_custody_group_count: u64) {
+        if let Err(e) = self.discovery_mut().update_enr_cgc(new_custody_group_count) {
+            crit!(self.log, "Could not update cgc in ENR"; "error" => ?e);
         }
         // update the local meta data which informs our peers of the update during PINGS
-        self.update_metadata_custody_group_count(custody_group_count);
-    }
-
-    pub fn update_custody_requirements(
-        &mut self,
-        advertise_epoch: Epoch,
-        custody_group_count: u64,
-    ) {
-        self.network_globals
-            .update_custody_requirements(advertise_epoch, custody_group_count);
+        self.update_metadata_cgc(new_custody_group_count);
     }
 
     /// Attempts to discover new peers for a given subnet. The `min_ttl` gives the time at which we
@@ -1255,7 +1241,7 @@ impl<AppReqId: ReqId, P: Preset> Network<AppReqId, P> {
     }
 
     /// Update the current custody group count in meta data of the node to match the local ENR.
-    fn update_metadata_custody_group_count(&mut self, scheduled_custody_group_count: u64) {
+    fn update_metadata_cgc(&mut self, scheduled_custody_group_count: u64) {
         // write lock scope
         let mut meta_data_w = self.network_globals.local_metadata.write();
 
