@@ -51,7 +51,7 @@ use types::{
     nonstandard::Phase,
     phase0::{
         consts::AttestationSubnetCount,
-        primitives::{Epoch, ForkDigest, Slot},
+        primitives::{ForkDigest, Slot},
     },
     preset::Preset,
 };
@@ -203,12 +203,16 @@ impl<P: Preset> Network<P> {
 
         // set up a collection of variables accessible outside of the network crate
         // Create an ENR or load from disk if appropriate
+        let next_fork_digest = ctx
+            .fork_context
+            .next_fork_digest()
+            .unwrap_or_else(|| ctx.fork_context.current_fork_digest());
         let enr = crate::discovery::enr::build_or_load_enr::<P>(
             &chain_config,
             local_keypair.clone(),
             &config,
             &ctx.enr_fork_id,
-            ctx.fork_context.next_fork_digest(),
+            next_fork_digest,
             &log,
         )?;
 
@@ -309,10 +313,7 @@ impl<P: Preset> Network<P> {
                 .into_iter()
                 .filter_map(|fork_epoch| {
                     if fork_epoch >= current_fork_epoch {
-                        Some((
-                            fork_epoch,
-                            ctx.fork_context.context_bytes_at_epoch(fork_epoch),
-                        ))
+                        Some((fork_epoch, ctx.fork_context.context_bytes(fork_epoch)))
                     } else {
                         None
                     }
@@ -1193,7 +1194,7 @@ impl<P: Preset> Network<P> {
     }
 
     /// Updates the local ENR's "nfd" field to `next_fork_digest`.
-    pub fn update_next_fork_digest(&mut self, next_fork_digest: ForkDigest) {
+    pub fn update_nfd(&mut self, next_fork_digest: ForkDigest) {
         if let Err(e) = self.discovery_mut().update_enr_nfd(next_fork_digest) {
             crit!(self.log, "Could not update ENR next fork digest"; "error" => ?e);
         }
