@@ -207,22 +207,24 @@ impl<P: Preset> Network<P> {
             .fork_context
             .next_fork_digest()
             .unwrap_or_else(|| ctx.fork_context.current_fork_digest());
+
+        let custody_group_count_opt = chain_config
+            .is_peerdas_scheduled()
+            .then_some(custody_group_count);
         let enr = crate::discovery::enr::build_or_load_enr::<P>(
             &chain_config,
             local_keypair.clone(),
             &config,
             &ctx.enr_fork_id,
+            custody_group_count_opt,
             next_fork_digest,
             &log,
         )?;
 
         // Construct the metadata
-        let custody_group_count_metadata = chain_config
-            .is_peerdas_scheduled()
-            .then_some(custody_group_count);
         let meta_data = utils::load_or_build_metadata(
             config.network_dir.as_deref(),
-            custody_group_count_metadata,
+            custody_group_count_opt,
             &log,
         );
         let seq_number = meta_data.seq_number();

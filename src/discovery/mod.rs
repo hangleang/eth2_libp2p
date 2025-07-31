@@ -1257,6 +1257,7 @@ mod tests {
             &enr_key,
             &config,
             &EnrForkId::default(),
+            None,
             ForkDigest::default(),
         )
         .unwrap();
