@@ -291,7 +291,7 @@ pub fn build_enr(
         let custody_group_count =
             chain_config.custody_group_count(config.subscribe_all_data_column_subnets);
         builder.add_value(PEERDAS_CUSTODY_GROUP_COUNT_ENR_KEY, &custody_group_count);
-        builder.add_value(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?);
+        builder.add_value::<Bytes>(NEXT_FORK_DIGEST_ENR_KEY, &next_fork_digest.to_ssz()?.into());
     }
 
     builder
@@ -390,6 +390,13 @@ mod test {
         )
         .unwrap();
         (enr, enr_key)
+    }
+
+    #[test]
+    fn test_nfd_enr_encoding() {
+        let chain_config = make_fulu_config();
+        let enr = build_enr_with_config(&chain_config, NetworkConfig::default()).0;
+        assert_eq!(enr.next_fork_digest().unwrap(), ForkDigest::default());
     }
 
     #[test]
