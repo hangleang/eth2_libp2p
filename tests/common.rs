@@ -80,10 +80,16 @@ pub async fn build_libp2p_instance<P: Preset>(
     };
 
     Libp2pInstance(
-        LibP2PService::new(chain_config.clone(), executor, libp2p_context, custody_group_count, &log)
-            .await
-            .expect("should build libp2p instance")
-            .0,
+        LibP2PService::new(
+            chain_config.clone(),
+            executor,
+            libp2p_context,
+            custody_group_count,
+            &log,
+        )
+        .await
+        .expect("should build libp2p instance")
+        .0,
     )
 }
 

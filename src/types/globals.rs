@@ -74,7 +74,7 @@ impl NetworkGlobals {
 
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
-        let sampling_size = config.sampling_size(custody_group_count);
+        let sampling_size = config.sampling_size_custody_groups(custody_group_count);
         let custody_groups = get_custody_groups(node_id, sampling_size, &config)
             .expect("should compute node custody groups");
 
@@ -118,7 +118,9 @@ impl NetworkGlobals {
     pub fn update_data_column_subnets(&self, custody_group_count: u64) {
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
-        let sampling_size = self.config.sampling_size(custody_group_count);
+        let sampling_size = self
+            .config
+            .sampling_size_custody_groups(custody_group_count);
         let custody_groups = get_custody_groups(
             self.local_enr().node_id().raw(),
             sampling_size,
@@ -348,7 +350,10 @@ mod test {
         chain_config.fulu_fork_epoch = 0;
 
         let custody_group_count = chain_config.number_of_custody_groups / 2;
-        let sampling_size = chain_config.sampling_size(custody_group_count);
+        let sampling_size = chain_config.sampling_size_custody_groups(custody_group_count);
+        let expected_sampling_subnet_count = sampling_size
+            * chain_config.data_column_sidecar_subnet_count
+            / chain_config.number_of_custody_groups;
         let metadata = get_metadata(custody_group_count);
         let config = Arc::new(NetworkConfig::default());
 
@@ -361,7 +366,7 @@ mod test {
         );
         assert_eq!(
             globals.sampling_subnets.read().len(),
-            sampling_size as usize
+            expected_sampling_subnet_count as usize
         );
     }
 
@@ -375,7 +380,8 @@ mod test {
         chain_config.fulu_fork_epoch = 0;
 
         let custody_group_count = chain_config.number_of_custody_groups / 2;
-        let sampling_size = chain_config.sampling_size(custody_group_count);
+        let expected_sampling_column_count =
+            chain_config.sampling_column_count(custody_group_count);
         let metadata = get_metadata(custody_group_count);
         let config = Arc::new(NetworkConfig::default());
 
@@ -388,7 +394,7 @@ mod test {
         );
         assert_eq!(
             globals.sampling_subnets.read().len(),
-            sampling_size as usize
+            expected_sampling_column_count as usize
         );
     }
 
