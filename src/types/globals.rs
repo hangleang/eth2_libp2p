@@ -16,6 +16,7 @@ use std_ext::ArcExt as _;
 use types::config::Config as ChainConfig;
 use types::fulu::primitives::ColumnIndex;
 use types::phase0::primitives::SubnetId;
+use types::preset::Preset;
 
 pub struct NetworkGlobals {
     /// Ethereum chain configuration. Immutable after initialization.
@@ -46,7 +47,7 @@ pub struct NetworkGlobals {
 }
 
 impl NetworkGlobals {
-    pub fn new(
+    pub fn new<P: Preset>(
         config: Arc<ChainConfig>,
         enr: Enr,
         local_metadata: MetaData,
@@ -80,14 +81,14 @@ impl NetworkGlobals {
 
         let mut sampling_subnets = HashSet::new();
         for custody_index in &custody_groups {
-            let subnets = compute_subnets_from_custody_group(*custody_index, &config)
+            let subnets = compute_subnets_from_custody_group::<P>(*custody_index, &config)
                 .expect("should compute custody subnets for node");
             sampling_subnets.extend(subnets);
         }
 
         let mut sampling_columns = HashSet::new();
         for custody_index in &custody_groups {
-            let columns = compute_columns_for_custody_group(*custody_index, &config)
+            let columns = compute_columns_for_custody_group::<P>(*custody_index, &config)
                 .expect("should compute custody columns for node");
             sampling_columns.extend(columns);
         }
@@ -115,7 +116,7 @@ impl NetworkGlobals {
     }
 
     /// Update the sampling subnets based on an updated cgc.
-    pub fn update_data_column_subnets(&self, custody_group_count: u64) {
+    pub fn update_data_column_subnets<P: Preset>(&self, custody_group_count: u64) {
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
         let sampling_size = self
@@ -130,14 +131,14 @@ impl NetworkGlobals {
 
         let mut sampling_subnets = self.sampling_subnets.write();
         for custody_index in &custody_groups {
-            let subnets = compute_subnets_from_custody_group(*custody_index, &self.config)
+            let subnets = compute_subnets_from_custody_group::<P>(*custody_index, &self.config)
                 .expect("should compute custody subnets for node");
             sampling_subnets.extend(subnets);
         }
 
         let mut sampling_columns = self.sampling_columns.write();
         for custody_index in &custody_groups {
-            let columns = compute_columns_for_custody_group(*custody_index, &self.config)
+            let columns = compute_columns_for_custody_group::<P>(*custody_index, &self.config)
                 .expect("should compute custody columns for node");
             sampling_columns.extend(columns);
         }
@@ -276,7 +277,7 @@ impl NetworkGlobals {
     }
 
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
-    pub fn new_test_globals(
+    pub fn new_test_globals<P: Preset>(
         chain_config: Arc<ChainConfig>,
         trusted_peers: Vec<PeerId>,
         log: &slog::Logger,
@@ -289,7 +290,7 @@ impl NetworkGlobals {
             custody_group_count: chain_config.custody_requirement,
         });
 
-        Self::new_test_globals_with_metadata(
+        Self::new_test_globals_with_metadata::<P>(
             chain_config,
             trusted_peers,
             metadata,
@@ -298,7 +299,7 @@ impl NetworkGlobals {
         )
     }
 
-    pub(crate) fn new_test_globals_with_metadata(
+    pub(crate) fn new_test_globals_with_metadata<P: Preset>(
         chain_config: Arc<ChainConfig>,
         trusted_peers: Vec<PeerId>,
         metadata: MetaData,
@@ -309,7 +310,7 @@ impl NetworkGlobals {
         let keypair = libp2p::identity::secp256k1::Keypair::generate();
         let enr_key: discv5::enr::CombinedKey = discv5::enr::CombinedKey::from_secp256k1(&keypair);
         let enr = discv5::enr::Enr::builder().build(&enr_key).unwrap();
-        NetworkGlobals::new(
+        NetworkGlobals::new::<P>(
             chain_config,
             enr,
             metadata,
@@ -325,6 +326,7 @@ impl NetworkGlobals {
 #[cfg(test)]
 mod test {
     use slog::{o, Drain as _, Level};
+    use types::preset::Mainnet;
 
     use super::*;
 
@@ -357,7 +359,7 @@ mod test {
         let metadata = get_metadata(custody_group_count);
         let config = Arc::new(NetworkConfig::default());
 
-        let globals = NetworkGlobals::new_test_globals_with_metadata(
+        let globals = NetworkGlobals::new_test_globals_with_metadata::<Mainnet>(
             Arc::new(chain_config),
             vec![],
             metadata,
@@ -381,11 +383,11 @@ mod test {
 
         let custody_group_count = chain_config.number_of_custody_groups / 2;
         let expected_sampling_column_count =
-            chain_config.sampling_column_count(custody_group_count);
+            chain_config.sampling_column_count::<Mainnet>(custody_group_count);
         let metadata = get_metadata(custody_group_count);
         let config = Arc::new(NetworkConfig::default());
 
-        let globals = NetworkGlobals::new_test_globals_with_metadata(
+        let globals = NetworkGlobals::new_test_globals_with_metadata::<Mainnet>(
             Arc::new(chain_config),
             vec![],
             metadata,

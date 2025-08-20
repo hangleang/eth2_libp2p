@@ -140,7 +140,7 @@ where
     /// The Eth2 RPC specified in the wire-0 protocol.
     pub eth2_rpc: RPC<AppRequestId, P>,
     /// Discv5 Discovery protocol.
-    pub discovery: Discovery,
+    pub discovery: Discovery<P>,
     /// Keep regular connection to peers and disconnect if absent.
     // NOTE: The id protocol is used for initial interop. This will be removed by mainnet.
     /// Provides IP addresses and peer information.
@@ -228,7 +228,7 @@ impl<P: Preset> Network<P> {
             &log,
         );
         let seq_number = meta_data.seq_number();
-        let globals = NetworkGlobals::new(
+        let globals = NetworkGlobals::new::<P>(
             chain_config.clone_arc(),
             enr,
             meta_data,
@@ -421,7 +421,7 @@ impl<P: Preset> Network<P> {
 
         let discovery = {
             // Build and start the discovery sub-behaviour
-            let mut discovery = Discovery::new(
+            let mut discovery = Discovery::<P>::new(
                 chain_config,
                 local_keypair.clone(),
                 &config,
@@ -460,7 +460,7 @@ impl<P: Preset> Network<P> {
                 target_peer_count: config.target_peers,
                 ..Default::default()
             };
-            PeerManager::new(peer_manager_cfg, network_globals.clone(), &log)?
+            PeerManager::new::<P>(peer_manager_cfg, network_globals.clone(), &log)?
         };
 
         let connection_limits = {
@@ -696,7 +696,7 @@ impl<P: Preset> Network<P> {
         &mut self.swarm.behaviour_mut().eth2_rpc
     }
     /// Discv5 Discovery protocol.
-    pub fn discovery_mut(&mut self) -> &mut Discovery {
+    pub fn discovery_mut(&mut self) -> &mut Discovery<P> {
         &mut self.swarm.behaviour_mut().discovery
     }
     /// Provides IP addresses and peer information.
@@ -717,7 +717,7 @@ impl<P: Preset> Network<P> {
         &self.swarm.behaviour().eth2_rpc
     }
     /// Discv5 Discovery protocol.
-    pub fn discovery(&self) -> &Discovery {
+    pub fn discovery(&self) -> &Discovery<P> {
         &self.swarm.behaviour().discovery
     }
     /// Provides IP addresses and peer information.
@@ -826,7 +826,7 @@ impl<P: Preset> Network<P> {
     /// Subscribe to all data columns determined by the cgc.
     pub fn subscribe_new_data_column_subnets(&mut self, custody_column_count: u64) {
         self.network_globals
-            .update_data_column_subnets(custody_column_count);
+            .update_data_column_subnets::<P>(custody_column_count);
 
         for column in self.network_globals.sampling_subnets() {
             let kind = GossipKind::DataColumnSidecar(column);
@@ -1294,7 +1294,7 @@ impl<P: Preset> Network<P> {
     /// Dial cached Enrs in discovery service that are in the given `subnet_id` and aren't
     /// in Connected, Dialing or Banned state.
     fn dial_cached_enrs_in_subnet(&mut self, chain_config: Arc<ChainConfig>, subnet: Subnet) {
-        let predicate = subnet_predicate(chain_config, vec![subnet], &self.log);
+        let predicate = subnet_predicate::<P>(chain_config, vec![subnet], &self.log);
         let peers_to_dial: Vec<Enr> = self
             .discovery()
             .cached_enrs()

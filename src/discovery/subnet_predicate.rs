@@ -3,10 +3,10 @@ use super::*;
 use eip_7594::compute_subnets_for_node;
 use slog::trace;
 use std::sync::Arc;
-use types::config::Config as ChainConfig;
+use types::{config::Config as ChainConfig, preset::Preset};
 
 /// Returns the predicate for a given subnet.
-pub fn subnet_predicate(
+pub fn subnet_predicate<P: Preset>(
     chain_config: Arc<ChainConfig>,
     subnets: Vec<Subnet>,
     log: &slog::Logger,
@@ -30,7 +30,7 @@ pub fn subnet_predicate(
                 .is_ok_and(|bitfield| bitfield.get(*subnet_id as usize).unwrap_or_default()),
             Subnet::DataColumn(subnet_id) => {
                 if let Ok(custody_group_count) = enr.custody_group_count(&chain_config) {
-                    compute_subnets_for_node(
+                    compute_subnets_for_node::<P>(
                         enr.node_id().raw(),
                         custody_group_count,
                         &chain_config,

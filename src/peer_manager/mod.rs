@@ -20,6 +20,7 @@ use std::{
 };
 use types::fulu::primitives::CustodyIndex;
 use types::phase0::primitives::SubnetId;
+use types::preset::Preset;
 
 pub use libp2p::core::Multiaddr;
 pub use libp2p::identity::Keypair;
@@ -147,7 +148,7 @@ pub enum PeerManagerEvent {
 
 impl PeerManager {
     // NOTE: Must be run inside a tokio executor.
-    pub fn new(
+    pub fn new<P: Preset>(
         cfg: config::Config,
         network_globals: Arc<NetworkGlobals>,
         log: &slog::Logger,
@@ -170,10 +171,12 @@ impl PeerManager {
         let subnets_by_custody_group = if chain_config.is_peerdas_scheduled() {
             (0..chain_config.number_of_custody_groups)
                 .map(|custody_index| {
-                    let subnets =
-                        compute_subnets_from_custody_group(custody_index, &network_globals.config)
-                            .expect("Should compute subnets for all custody groups")
-                            .collect();
+                    let subnets = compute_subnets_from_custody_group::<P>(
+                        custody_index,
+                        &network_globals.config,
+                    )
+                    .expect("Should compute subnets for all custody groups")
+                    .collect();
                     (custody_index, subnets)
                 })
                 .collect::<HashMap<_, Vec<SubnetId>>>()
@@ -1529,7 +1532,7 @@ mod tests {
     use crate::rpc::MetaDataV3;
     use crate::NetworkConfig;
     use slog::{o, Drain};
-    use types::{config::Config as ChainConfig, nonstandard::Phase};
+    use types::{config::Config as ChainConfig, nonstandard::Phase, preset::Mainnet};
 
     pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
         let decorator = slog_term::TermDecorator::new().build();
@@ -1570,9 +1573,13 @@ mod tests {
             ..Default::default()
         });
         let log = build_log(slog::Level::Debug, false);
-        let globals =
-            NetworkGlobals::new_test_globals(chain_config, trusted_peers, &log, network_config);
-        PeerManager::new(config, Arc::new(globals), &log).unwrap()
+        let globals = NetworkGlobals::new_test_globals::<Mainnet>(
+            chain_config,
+            trusted_peers,
+            &log,
+            network_config,
+        );
+        PeerManager::new::<Mainnet>(config, Arc::new(globals), &log).unwrap()
     }
 
     #[tokio::test]
