@@ -2,7 +2,7 @@
 //!
 //! This module creates a libp2p dummy-behaviour built around the discv5 protocol. It handles
 //! queries and manages access to the discovery routing table.
-use core::num::NonZeroUsize;
+use core::{marker::PhantomData, num::NonZeroUsize};
 
 pub(crate) mod enr;
 pub mod enr_ext;
@@ -50,6 +50,7 @@ use std::{
 use tokio::sync::mpsc;
 use types::config::Config as ChainConfig;
 use types::phase0::primitives::ForkDigest;
+use types::preset::Preset;
 
 use crate::types::EnrForkId;
 
@@ -161,7 +162,7 @@ enum EventStream {
 
 /// The main discovery service. This can be disabled via CLI arguements. When disabled the
 /// underlying processes are not started, but this struct still maintains our current ENR.
-pub struct Discovery {
+pub struct Discovery<P: Preset> {
     chain_config: Arc<ChainConfig>,
 
     /// A collection of seen live ENRs for quick lookup and to map peer-id's to ENRs.
@@ -201,9 +202,11 @@ pub struct Discovery {
 
     /// Logger for the discovery behaviour.
     log: slog::Logger,
+
+    pub phantom: PhantomData<P>,
 }
 
-impl Discovery {
+impl<P: Preset> Discovery<P> {
     /// NOTE: Creating discovery requires running within a tokio execution environment.
     pub async fn new(
         chain_config: Arc<ChainConfig>,
@@ -342,6 +345,7 @@ impl Discovery {
             update_ports,
             log,
             enr_dir,
+            phantom: PhantomData,
         })
     }
 
@@ -795,7 +799,7 @@ impl Discovery {
         if !filtered_subnet_queries.is_empty() {
             // build the subnet predicate as a combination of the eth2_fork_predicate and the subnet predicate
             let subnet_predicate =
-                subnet_predicate(self.chain_config.clone(), filtered_subnets, &self.log);
+                subnet_predicate::<P>(self.chain_config.clone(), filtered_subnets, &self.log);
 
             debug!(
                 self.log,
@@ -922,7 +926,7 @@ impl Discovery {
                             self.add_subnet_query(query.subnet, query.min_ttl, query.retries + 1);
 
                             // Check the specific subnet against the enr
-                            let subnet_predicate = subnet_predicate(
+                            let subnet_predicate = subnet_predicate::<P>(
                                 self.chain_config.clone(),
                                 vec![query.subnet],
                                 &self.log,
@@ -997,7 +1001,7 @@ impl Discovery {
 
 /* NetworkBehaviour Implementation */
 
-impl NetworkBehaviour for Discovery {
+impl<P: Preset> NetworkBehaviour for Discovery<P> {
     // Discovery is not a real NetworkBehaviour...
     type ConnectionHandler = ConnectionHandler;
     type ToSwarm = DiscoveredPeers;
@@ -1192,7 +1196,7 @@ impl NetworkBehaviour for Discovery {
     }
 }
 
-impl Discovery {
+impl<P: Preset> Discovery<P> {
     fn on_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
         if let Some(peer_id) = peer_id {
             match error {
@@ -1232,6 +1236,7 @@ mod tests {
     use libp2p::identity::secp256k1;
     use slog::{o, Drain};
     use std_ext::ArcExt as _;
+    use types::preset::Mainnet;
 
     pub fn build_log(level: slog::Level, enabled: bool) -> slog::Logger {
         let decorator = slog_term::TermDecorator::new().build();
@@ -1245,7 +1250,7 @@ mod tests {
         }
     }
 
-    async fn build_discovery() -> Discovery {
+    async fn build_discovery() -> Discovery<Mainnet> {
         let chain_config = Arc::new(ChainConfig::mainnet());
         let keypair = secp256k1::Keypair::generate();
         let mut config = NetworkConfig::default();
@@ -1262,7 +1267,7 @@ mod tests {
         )
         .unwrap();
         let log = build_log(slog::Level::Debug, false);
-        let globals = NetworkGlobals::new(
+        let globals = NetworkGlobals::new::<Mainnet>(
             chain_config.clone_arc(),
             enr,
             MetaData::V2(MetaDataV2 {

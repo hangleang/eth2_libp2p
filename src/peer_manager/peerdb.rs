@@ -775,7 +775,7 @@ impl PeerDB {
     }
 
     /// Updates the connection state. MUST ONLY BE USED IN TESTS.
-    pub fn __add_connected_peer_testing_only(&mut self, supernode: bool) -> PeerId {
+    pub fn __add_connected_peer_testing_only<P: Preset>(&mut self, supernode: bool) -> PeerId {
         let enr_key = CombinedKey::generate_secp256k1();
         let mut enr = Enr::builder().build(&enr_key).unwrap();
         let peer_id = enr.peer_id();
@@ -821,7 +821,7 @@ impl PeerDB {
         } else {
             let peer_info = self.peers.get_mut(&peer_id).expect("peer exists");
             let node_id = peer_id_to_node_id(&peer_id).expect("convert peer_id to node_id");
-            let subnets = compute_subnets_for_node(
+            let subnets = compute_subnets_for_node::<P>(
                 node_id.raw(),
                 self.chain_config.custody_requirement,
                 &self.chain_config,
