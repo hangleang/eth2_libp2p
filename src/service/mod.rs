@@ -255,7 +255,7 @@ impl<P: Preset> Network<P> {
             config.network_load,
             ctx.fork_context.clone(),
             gossipsub_config_params,
-            chain_config.seconds_per_slot.get(),
+            chain_config.slot_duration_ms.as_secs(),
             chain_config
                 .preset_base
                 .phase0_preset()
@@ -267,9 +267,9 @@ impl<P: Preset> Network<P> {
         let score_settings = PeerScoreSettings::new(&chain_config, gs_config.mesh_n());
 
         let gossip_cache = {
-            let slot_duration = std::time::Duration::from_secs(chain_config.seconds_per_slot.get());
+            let slot_duration = chain_config.slot_duration_ms;
             let half_epoch = std::time::Duration::from_secs(
-                chain_config.seconds_per_slot.get() * P::SlotsPerEpoch::U64 / 2,
+                chain_config.slot_duration_ms.as_secs() * P::SlotsPerEpoch::U64 / 2,
             );
 
             GossipCache::builder()
