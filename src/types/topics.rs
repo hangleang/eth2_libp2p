@@ -198,8 +198,8 @@ impl std::fmt::Display for GossipKind {
             GossipKind::BlobSidecar(blob_index) => {
                 write!(f, "{}{}", BLOB_SIDECAR_PREFIX, blob_index)
             }
-            GossipKind::DataColumnSidecar(column_index) => {
-                write!(f, "{}{}", DATA_COLUMN_SIDECAR_PREFIX, column_index)
+            GossipKind::DataColumnSidecar(column_subnet_id) => {
+                write!(f, "{}{}", DATA_COLUMN_SIDECAR_PREFIX, column_subnet_id)
             }
             x => f.write_str(x.as_ref()),
         }
@@ -287,7 +287,9 @@ impl GossipTopic {
         match self.kind() {
             GossipKind::Attestation(subnet_id) => Some(Subnet::Attestation(*subnet_id)),
             GossipKind::SyncCommitteeMessage(subnet_id) => Some(Subnet::SyncCommittee(*subnet_id)),
-            GossipKind::DataColumnSidecar(subnet_id) => Some(Subnet::DataColumn(*subnet_id)),
+            GossipKind::DataColumnSidecar(column_subnet_id) => {
+                Some(Subnet::DataColumn(*column_subnet_id))
+            }
             _ => None,
         }
     }
