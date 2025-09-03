@@ -4,9 +4,7 @@ use crate::peer_manager::peerdb::PeerDB;
 use crate::rpc::{MetaData, MetaDataV3};
 use crate::types::{BackFillState, SyncState};
 use crate::{Client, Enr, EnrExt, GossipTopic, Multiaddr, NetworkConfig, PeerId};
-use eip_7594::{
-    compute_columns_for_custody_group, compute_subnets_from_custody_group, get_custody_groups,
-};
+use eip_7594::{compute_subnets_from_custody_group, get_custody_groups};
 use helper_functions::misc::compute_subnet_for_data_column_sidecar;
 use parking_lot::RwLock;
 use slog::error;
@@ -39,7 +37,6 @@ pub struct NetworkGlobals {
     pub backfill_state: RwLock<BackFillState>,
     /// The computed sampling subnets and columns is stored to avoid re-computing.
     sampling_subnets: RwLock<HashSet<SubnetId>>,
-    sampling_columns: RwLock<HashSet<ColumnIndex>>,
     /// Target subnet peers.
     pub target_subnet_peers: usize,
     /// Network-related configuration. Immutable after initialization.
@@ -86,13 +83,6 @@ impl NetworkGlobals {
             sampling_subnets.extend(subnets);
         }
 
-        let mut sampling_columns = HashSet::new();
-        for custody_index in &custody_groups {
-            let columns = compute_columns_for_custody_group::<P>(*custody_index, &config)
-                .expect("should compute custody columns for node");
-            sampling_columns.extend(columns);
-        }
-
         NetworkGlobals {
             config: config.clone_arc(),
             local_enr: RwLock::new(enr.clone()),
@@ -109,19 +99,15 @@ impl NetworkGlobals {
             sync_state: RwLock::new(SyncState::Stalled),
             backfill_state: RwLock::new(BackFillState::Paused),
             sampling_subnets: RwLock::new(sampling_subnets),
-            sampling_columns: RwLock::new(sampling_columns),
             target_subnet_peers,
             network_config,
         }
     }
 
     /// Update the sampling subnets based on an updated cgc.
-    pub fn update_data_column_subnets<P: Preset>(&self, custody_group_count: u64) {
+    pub fn update_data_column_subnets<P: Preset>(&self, sampling_size: u64) {
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
-        let sampling_size = self
-            .config
-            .sampling_size_custody_groups(custody_group_count);
         let custody_groups = get_custody_groups(
             self.local_enr().node_id().raw(),
             sampling_size,
@@ -134,13 +120,6 @@ impl NetworkGlobals {
             let subnets = compute_subnets_from_custody_group::<P>(*custody_index, &self.config)
                 .expect("should compute custody subnets for node");
             sampling_subnets.extend(subnets);
-        }
-
-        let mut sampling_columns = self.sampling_columns.write();
-        for custody_index in &custody_groups {
-            let columns = compute_columns_for_custody_group::<P>(*custody_index, &self.config)
-                .expect("should compute custody columns for node");
-            sampling_columns.extend(columns);
         }
     }
 
@@ -268,14 +247,6 @@ impl NetworkGlobals {
         self.sampling_subnets.read().clone()
     }
 
-    pub fn sampling_columns(&self) -> HashSet<ColumnIndex> {
-        self.sampling_columns.read().clone()
-    }
-
-    pub fn sampling_columns_count(&self) -> usize {
-        self.sampling_columns.read().len()
-    }
-
     /// TESTING ONLY. Build a dummy NetworkGlobals instance.
     pub fn new_test_globals<P: Preset>(
         chain_config: Arc<ChainConfig>,
@@ -369,34 +340,6 @@ mod test {
         assert_eq!(
             globals.sampling_subnets.read().len(),
             expected_sampling_subnet_count as usize
-        );
-    }
-
-    #[test]
-    fn test_sampling_columns() {
-        let log_level = Level::Debug;
-        let enable_logging = false;
-
-        let log = build_log(log_level, enable_logging);
-        let mut chain_config = ChainConfig::mainnet();
-        chain_config.fulu_fork_epoch = 0;
-
-        let custody_group_count = chain_config.number_of_custody_groups / 2;
-        let expected_sampling_column_count =
-            chain_config.sampling_column_count::<Mainnet>(custody_group_count);
-        let metadata = get_metadata(custody_group_count);
-        let config = Arc::new(NetworkConfig::default());
-
-        let globals = NetworkGlobals::new_test_globals_with_metadata::<Mainnet>(
-            Arc::new(chain_config),
-            vec![],
-            metadata,
-            &log,
-            config,
-        );
-        assert_eq!(
-            globals.sampling_subnets.read().len(),
-            expected_sampling_column_count as usize
         );
     }
 
