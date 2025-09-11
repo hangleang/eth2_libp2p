@@ -91,9 +91,7 @@ impl ForkContext {
 
     /// Returns `true` if the provided `phase` exists in the `ForkContext` object.
     pub fn fork_exists(&self, phase: Phase) -> bool {
-        self.epoch_to_forks
-            .values()
-            .any(|fork| fork.fork_name == phase)
+        self.chain_config.fork_epoch(phase) != FAR_FUTURE_EPOCH
     }
 
     /// Returns the current fork name.
