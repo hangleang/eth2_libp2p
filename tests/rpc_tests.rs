@@ -4,12 +4,14 @@ use eth2_libp2p::rpc::{methods::*, RequestType};
 use eth2_libp2p::{service::api_types::AppRequestId, NetworkEvent, ReportSource, Response};
 use helper_functions::misc;
 use slog::{debug, error, warn, Level};
-use ssz::{ByteList, ContiguousList, SszReadDefault as _, SszWrite as _};
+use ssz::{ByteList, ContiguousList, DynamicList, SszRead as _, SszReadDefault, SszWrite};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use try_from_iterator::TryFromIterator as _;
+use try_from_iterator::TryFromIterator;
+use typenum::Unsigned as _;
 use types::deneb::containers::BlobSidecar;
+use types::fulu::containers::{DataColumnSidecar, DataColumnsByRootIdentifier};
 use types::phase0::primitives::H32;
 use types::{
     bellatrix::containers::{
@@ -882,7 +884,7 @@ async fn test_tcp_blocks_by_root_chunked_rpc() {
                         receiver.send_response(
                             peer_id,
                             inbound_request_id,
-                            Response::BlocksByRange(None),
+                            Response::BlocksByRoot(None),
                         );
                         debug!(log, "Send stream term");
                     }
@@ -895,6 +897,255 @@ async fn test_tcp_blocks_by_root_chunked_rpc() {
         _ = sender_future => {}
         _ = receiver_future => {}
         _ = sleep(Duration::from_secs(30)) => {
+            panic!("Future timed out");
+        }
+    }
+}
+
+#[tokio::test]
+#[allow(clippy::single_match)]
+async fn test_tcp_columns_by_root_chunked_rpc() {
+    // set up the logging.
+    let log_level = Level::Debug;
+    let enable_logging = false;
+    let log = common::build_log(log_level, enable_logging);
+    let num_of_columns = <Mainnet as Preset>::NumberOfColumns::U64;
+    let messages_to_send = 32 * num_of_columns;
+
+    let mut config = Config::mainnet().rapid_upgrade();
+    // check if `max_data_columns_by_root_request` derived as expected with `max_request_blocks_deneb` changed
+    config.max_request_blocks_deneb = 256;
+    let config = Arc::new(config);
+    let current_fork_name = Phase::Fulu;
+
+    // get sender/receiver
+    let (mut sender, mut receiver) = common::build_node_pair::<Mainnet>(
+        &config,
+        &log,
+        current_fork_name,
+        Protocol::Tcp,
+        false,
+        None,
+    )
+    .await;
+
+    // DataColumnsByRootRequest Request
+    let max_request_blocks = config.max_request_blocks_deneb as usize;
+    let req = DataColumnsByRootRequest::new(
+        &config,
+        vec![
+            DataColumnsByRootIdentifier {
+                block_root: H256::zero(),
+                columns: ContiguousList::try_from_iter(0..num_of_columns).unwrap(),
+            };
+            max_request_blocks
+        ]
+        .into_iter(),
+    );
+    let req_decoded = DataColumnsByRootRequest {
+        data_column_ids: DynamicList::from_ssz(
+            &max_request_blocks,
+            &req.data_column_ids.to_ssz().unwrap(),
+        )
+        .unwrap(),
+    };
+    assert_eq!(req, req_decoded);
+    let rpc_request = RequestType::DataColumnsByRoot(req);
+
+    // DataColumnsByRoot Response
+    let mut data_column_sidecar = DataColumnSidecar::default();
+    data_column_sidecar.signed_block_header.message.slot =
+        misc::compute_start_slot_at_epoch::<Mainnet>(config.fulu_fork_epoch);
+    let data_column = Arc::new(data_column_sidecar);
+
+    let rpc_response = Response::DataColumnsByRoot(Some(data_column.clone()));
+
+    // keep count of the number of messages received
+    let mut messages_received = 0;
+    // build the sender future
+    let sender_future = async {
+        loop {
+            match sender.next_event().await {
+                NetworkEvent::PeerConnectedOutgoing(peer_id) => {
+                    // Send a STATUS message
+                    debug!(log, "Sending RPC");
+                    sender
+                        .send_request(peer_id, AppRequestId::Application(6), rpc_request.clone())
+                        .unwrap();
+                }
+                NetworkEvent::ResponseReceived {
+                    peer_id: _,
+                    app_request_id: AppRequestId::Application(6),
+                    response,
+                } => match response {
+                    Response::DataColumnsByRoot(Some(sidecar)) => {
+                        assert_eq!(sidecar, data_column.clone());
+                        messages_received += 1;
+                        debug!(log, "Chunk received");
+                    }
+                    Response::DataColumnsByRoot(None) => {
+                        // should be exactly messages_to_send
+                        assert_eq!(messages_received, messages_to_send);
+                        // end the test
+                        return;
+                    }
+                    _ => {} // Ignore other RPC messages
+                },
+                _ => {} // Ignore other behaviour events
+            }
+        }
+    };
+
+    // build the receiver future
+    let receiver_future = async {
+        loop {
+            match receiver.next_event().await {
+                NetworkEvent::RequestReceived {
+                    peer_id,
+                    inbound_request_id,
+                    request_type,
+                } => {
+                    if request_type == rpc_request {
+                        // send the response
+                        debug!(log, "Receiver got request");
+
+                        for _ in 0..messages_to_send {
+                            receiver.send_response(
+                                peer_id,
+                                inbound_request_id,
+                                rpc_response.clone(),
+                            );
+                            debug!(log, "Sending message");
+                        }
+                        // send the stream termination
+                        receiver.send_response(
+                            peer_id,
+                            inbound_request_id,
+                            Response::DataColumnsByRoot(None),
+                        );
+                        debug!(log, "Send stream term");
+                    }
+                }
+                e => {
+                    debug!(log, "Got event {:?}", e);
+                } // Ignore other events
+            }
+        }
+    };
+    tokio::select! {
+        _ = sender_future => {}
+        _ = receiver_future => {}
+        _ = sleep(Duration::from_secs(300)) => {
+            panic!("Future timed out");
+        }
+    }
+}
+
+#[tokio::test]
+#[allow(clippy::single_match)]
+async fn test_tcp_columns_by_range_chunked_rpc() {
+    // set up the logging.
+    let log_level = Level::Debug;
+    let enable_logging = false;
+    let log = common::build_log(log_level, enable_logging);
+    let messages_to_send = 32;
+    let config = Arc::new(Config::mainnet().rapid_upgrade());
+
+    // get sender/receiver
+    let (mut sender, mut receiver) =
+        common::build_node_pair::<Mainnet>(&config, &log, Phase::Fulu, Protocol::Tcp, false, None)
+            .await;
+
+    // DataColumnsByRange Request
+    let number_of_columns = <Mainnet as Preset>::NumberOfColumns::U64;
+    let rpc_request = RequestType::DataColumnsByRange(DataColumnsByRangeRequest {
+        start_slot: misc::compute_start_slot_at_epoch::<Mainnet>(config.fulu_fork_epoch),
+        count: messages_to_send,
+        columns: Arc::new(ContiguousList::try_from_iter(0..number_of_columns).unwrap()),
+    });
+
+    // DataColumnsByRange Response
+    let mut data_column_sidecar = DataColumnSidecar::default();
+    data_column_sidecar.signed_block_header.message.slot =
+        misc::compute_start_slot_at_epoch::<Mainnet>(config.fulu_fork_epoch);
+    let data_column = Arc::new(data_column_sidecar);
+
+    let rpc_response = Response::DataColumnsByRange(Some(data_column.clone()));
+
+    // keep count of the number of messages received
+    let mut messages_received = 0;
+    // build the sender future
+    let sender_future = async {
+        loop {
+            match sender.next_event().await {
+                NetworkEvent::PeerConnectedOutgoing(peer_id) => {
+                    // Send a STATUS message
+                    debug!(log, "Sending RPC");
+                    sender
+                        .send_request(peer_id, AppRequestId::Application(6), rpc_request.clone())
+                        .unwrap();
+                }
+                NetworkEvent::ResponseReceived {
+                    peer_id: _,
+                    app_request_id: AppRequestId::Application(6),
+                    response,
+                } => match response {
+                    Response::DataColumnsByRange(Some(sidecar)) => {
+                        assert_eq!(sidecar, data_column.clone());
+                        messages_received += 1;
+                        debug!(log, "Chunk received");
+                    }
+                    Response::DataColumnsByRange(None) => {
+                        // should be exactly messages_to_send
+                        assert_eq!(messages_received, messages_to_send);
+                        // end the test
+                        return;
+                    }
+                    _ => {} // Ignore other RPC messages
+                },
+                _ => {} // Ignore other behaviour events
+            }
+        }
+    };
+
+    // build the receiver future
+    let receiver_future = async {
+        loop {
+            match receiver.next_event().await {
+                NetworkEvent::RequestReceived {
+                    peer_id,
+                    inbound_request_id,
+                    request_type,
+                } => {
+                    if request_type == rpc_request {
+                        // send the response
+                        debug!(log, "Receiver got request");
+
+                        for _ in 0..messages_to_send {
+                            receiver.send_response(
+                                peer_id,
+                                inbound_request_id,
+                                rpc_response.clone(),
+                            );
+                            debug!(log, "Sending message");
+                        }
+                        // send the stream termination
+                        receiver.send_response(
+                            peer_id,
+                            inbound_request_id,
+                            Response::DataColumnsByRange(None),
+                        );
+                        debug!(log, "Send stream term");
+                    }
+                }
+                _ => {} // Ignore other events
+            }
+        }
+    };
+    tokio::select! {
+        _ = sender_future => {}
+        _ = receiver_future => {}
+        _ = sleep(Duration::from_secs(300)) => {
             panic!("Future timed out");
         }
     }

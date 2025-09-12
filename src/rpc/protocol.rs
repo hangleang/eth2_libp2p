@@ -19,7 +19,7 @@ use tokio_util::{
 };
 use typenum::Unsigned as _;
 use types::deneb::containers::BlobIdentifier;
-use types::fulu::containers::{DataColumnSidecar, DataColumnsByRootIdentifier};
+use types::fulu::containers::DataColumnSidecar;
 use types::phase0::primitives::Epoch;
 use types::{
     altair::containers::{
@@ -458,11 +458,9 @@ impl ProtocolId {
                 0,
                 chain_config.max_request_blob_sidecars(phase) as usize * BlobIdentifier::SIZE.get(),
             ),
-            Protocol::DataColumnsByRoot => RpcLimits::new(
-                0,
-                chain_config.max_request_blocks_deneb as usize
-                    * DataColumnsByRootIdentifier::<P>::SIZE.get(),
-            ),
+            Protocol::DataColumnsByRoot => {
+                RpcLimits::new(0, chain_config.max_data_columns_by_root_request::<P>())
+            }
             Protocol::DataColumnsByRange => RpcLimits::new(
                 DataColumnsByRangeRequest::<P>::ssz_min_len().unwrap_or_default(),
                 DataColumnsByRangeRequest::<P>::ssz_max_len()
