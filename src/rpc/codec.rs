@@ -618,7 +618,7 @@ fn handle_rpc_request<P: Preset>(
         SupportedProtocol::DataColumnsByRootV1 => Ok(Some(RequestType::DataColumnsByRoot(
             DataColumnsByRootRequest {
                 data_column_ids: DynamicList::from_ssz(
-                    &(config.max_request_data_column_sidecars as usize),
+                    &(config.max_request_blocks(current_phase) as usize),
                     decoded_buffer,
                 )?,
             },
@@ -1215,13 +1215,16 @@ mod tests {
         }
     }
 
-    fn dcbroot_request<P: Preset>() -> DataColumnsByRootRequest<P> {
+    fn dcbroot_request<P: Preset>(config: &Config) -> DataColumnsByRootRequest<P> {
         DataColumnsByRootRequest {
-            data_column_ids: DynamicList::single(DataColumnsByRootIdentifier {
-                block_root: H256::zero(),
-                columns: ContiguousList::try_from(vec![1, 2, 3])
-                    .expect("columns indices must be able to parsed from list of numbers"),
-            }),
+            data_column_ids: DynamicList::full(
+                DataColumnsByRootIdentifier {
+                    block_root: H256::zero(),
+                    columns: ContiguousList::try_from(vec![1, 2, 3])
+                        .expect("columns indices must be able to parsed from list of numbers"),
+                },
+                config.max_request_blocks_deneb as usize,
+            ),
         }
     }
 
@@ -2166,7 +2169,7 @@ mod tests {
             RequestType::BlocksByRange(bbrange_request_v2()),
             RequestType::MetaData(MetadataRequest::new_v1()),
             RequestType::DataColumnsByRange(dcbrange_request::<Mainnet>()),
-            RequestType::DataColumnsByRoot(dcbroot_request::<Mainnet>()),
+            RequestType::DataColumnsByRoot(dcbroot_request::<Mainnet>(&config)),
             RequestType::MetaData(MetadataRequest::new_v2()),
             RequestType::MetaData(MetadataRequest::new_v3()),
         ];
