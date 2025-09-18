@@ -4,6 +4,7 @@ use crate::types::ForkContext;
 use futures::future::BoxFuture;
 use futures::prelude::{AsyncRead, AsyncWrite};
 use futures::{FutureExt, StreamExt};
+use helper_functions::misc;
 use libp2p::core::{InboundUpgrade, UpgradeInfo};
 use ssz::{ReadError, SszSize as _, SszWrite as _, WriteError, H256};
 use std::io;
@@ -655,13 +656,16 @@ impl<P: Preset> RequestType<P> {
     /* These functions are used in the handler for stream management */
 
     /// Maximum number of responses expected for this request.
-    pub fn max_responses(&self, chain_config: &ChainConfig, epoch: Epoch) -> u64 {
+    pub fn max_responses(&self, chain_config: &ChainConfig, _epoch: Epoch) -> u64 {
         match self {
             RequestType::Status(_) => 1,
             RequestType::Goodbye(_) => 0,
             RequestType::BlocksByRange(req) => req.count(),
             RequestType::BlocksByRoot(req) => req.len() as u64,
-            RequestType::BlobsByRange(req) => req.max_blobs_requested(chain_config, epoch),
+            RequestType::BlobsByRange(req) => {
+                let epoch = misc::compute_epoch_at_slot::<P>(req.start_slot);
+                req.max_blobs_requested(chain_config, epoch)
+            }
             RequestType::BlobsByRoot(req) => req.blob_ids.len() as u64,
             RequestType::DataColumnsByRoot(req) => req.max_requested() as u64,
             RequestType::DataColumnsByRange(req) => req.max_requested(),
