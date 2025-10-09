@@ -956,7 +956,7 @@ async fn test_tcp_columns_by_root_chunked_rpc() {
     let mut data_column_sidecar = DataColumnSidecar::default();
     data_column_sidecar.signed_block_header.message.slot =
         misc::compute_start_slot_at_epoch::<Mainnet>(config.fulu_fork_epoch);
-    let data_column = Arc::new(data_column_sidecar);
+    let data_column = Arc::new(data_column_sidecar.into());
 
     let rpc_response = Response::DataColumnsByRoot(Some(data_column.clone()));
 
@@ -1068,7 +1068,7 @@ async fn test_tcp_columns_by_range_chunked_rpc() {
     let mut data_column_sidecar = DataColumnSidecar::default();
     data_column_sidecar.signed_block_header.message.slot =
         misc::compute_start_slot_at_epoch::<Mainnet>(config.fulu_fork_epoch);
-    let data_column = Arc::new(data_column_sidecar);
+    let data_column = Arc::new(data_column_sidecar.into());
 
     let rpc_response = Response::DataColumnsByRange(Some(data_column.clone()));
 
