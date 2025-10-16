@@ -172,8 +172,8 @@ impl PeerManager {
             (0..chain_config.number_of_custody_groups)
                 .map(|custody_index| {
                     let subnets = compute_subnets_from_custody_group::<P>(
-                        custody_index,
                         &network_globals.config,
+                        custody_index,
                     )
                     .expect("Should compute subnets for all custody groups")
                     .collect();
@@ -1485,7 +1485,7 @@ impl PeerManager {
             return Err("Invalid custody group count in metadata: out of range".to_string());
         }
 
-        get_custody_groups(node_id.raw(), custody_group_count, config).map_err(|e| {
+        get_custody_groups(config, node_id.raw(), custody_group_count).map_err(|e| {
             format!(
                 "Error computing peer custody groups for node {} with cgc={}: {:?}",
                 node_id, custody_group_count, e

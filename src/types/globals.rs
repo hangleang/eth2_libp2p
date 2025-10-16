@@ -73,12 +73,12 @@ impl NetworkGlobals {
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
         let sampling_size = config.sampling_size_custody_groups(custody_group_count);
-        let custody_groups = get_custody_groups(node_id, sampling_size, &config)
+        let custody_groups = get_custody_groups(&config, node_id, sampling_size)
             .expect("should compute node custody groups");
 
         let mut sampling_subnets = HashSet::new();
         for custody_index in &custody_groups {
-            let subnets = compute_subnets_from_custody_group::<P>(*custody_index, &config)
+            let subnets = compute_subnets_from_custody_group::<P>(&config, *custody_index)
                 .expect("should compute custody subnets for node");
             sampling_subnets.extend(subnets);
         }
@@ -109,15 +109,15 @@ impl NetworkGlobals {
         // The below `expect` calls will panic on start up if the chain spec config values used
         // are invalid
         let custody_groups = get_custody_groups(
+            &self.config,
             self.local_enr().node_id().raw(),
             sampling_size,
-            &self.config,
         )
         .expect("should compute node custody groups");
 
         let mut sampling_subnets = self.sampling_subnets.write();
         for custody_index in &custody_groups {
-            let subnets = compute_subnets_from_custody_group::<P>(*custody_index, &self.config)
+            let subnets = compute_subnets_from_custody_group::<P>(&self.config, *custody_index)
                 .expect("should compute custody subnets for node");
             sampling_subnets.extend(subnets);
         }

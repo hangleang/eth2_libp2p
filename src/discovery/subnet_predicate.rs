@@ -31,9 +31,9 @@ pub fn subnet_predicate<P: Preset>(
             Subnet::DataColumn(subnet_id) => {
                 if let Ok(custody_group_count) = enr.custody_group_count(&chain_config) {
                     compute_subnets_for_node::<P>(
+                        &chain_config,
                         enr.node_id().raw(),
                         custody_group_count,
-                        &chain_config,
                     )
                     .map_or(false, |subnets| subnets.contains(subnet_id))
                 } else {
