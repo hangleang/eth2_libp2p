@@ -130,7 +130,7 @@ fn rpc_light_client_updates_by_range_limits_by_fork<P: Preset>(current_fork: Pha
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => {
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Pq => {
             RpcLimits::new(
                 altair_fixed_len,
                 altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
@@ -145,7 +145,7 @@ fn rpc_light_client_finality_update_limits_by_fork<P: Preset>(current_fork: Phas
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => {
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Pq => {
             RpcLimits::new(
                 altair_fixed_len,
                 altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
@@ -160,7 +160,7 @@ fn rpc_light_client_optimistic_update_limits_by_fork<P: Preset>(current_fork: Ph
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => {
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Pq => {
             RpcLimits::new(
                 altair_fixed_len,
                 altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),
@@ -175,7 +175,7 @@ fn rpc_light_client_bootstrap_limits_by_fork<P: Preset>(current_fork: Phase) -> 
     match &current_fork {
         Phase::Phase0 => RpcLimits::new(0, 0),
         Phase::Altair | Phase::Bellatrix => RpcLimits::new(altair_fixed_len, altair_fixed_len),
-        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas => {
+        Phase::Capella | Phase::Deneb | Phase::Electra | Phase::Fulu | Phase::Gloas | Phase::Pq => {
             RpcLimits::new(
                 altair_fixed_len,
                 altair_fixed_len + P::MaxExtraDataBytes::USIZE * u8::SIZE.get(),

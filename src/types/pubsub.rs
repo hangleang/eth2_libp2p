@@ -44,6 +44,7 @@ use types::{
         },
         primitives::{ForkDigest, SubnetId},
     },
+    pq::containers::SignedBeaconBlock as PqSignedBeaconBlock,
     preset::Preset,
     traits::SignedBeaconBlock as _,
 };
@@ -237,6 +238,10 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 )
                             }
+                            // TODO(PQ): Decode PQ aggregates.
+                            Some(Phase::Pq) => {
+                                return Err("PQ aggregate gossip is not supported yet".to_owned());
+                            }
                             None => {
                                 return Err(format!(
                                     "Unknown gossipsub fork digest: {:?}",
@@ -273,6 +278,10 @@ impl<P: Preset> PubsubMessage<P> {
                                     *subnet_id,
                                     single_attestation,
                                 ))
+                            }
+                            // TODO(PQ): Decode PQ attestations.
+                            Some(Phase::Pq) => {
+                                return Err("PQ attestation gossip is not supported yet".to_owned());
                             }
                             None => {
                                 return Err(format!(
@@ -318,6 +327,10 @@ impl<P: Preset> PubsubMessage<P> {
                                 GloasSignedBeaconBlock::from_ssz_default(data)
                                     .map_err(|e| format!("{:?}", e))?,
                             ),
+                            Some(Phase::Pq) => SignedBeaconBlock::Pq(
+                                PqSignedBeaconBlock::from_ssz_default(data)
+                                    .map_err(|e| format!("{:?}", e))?,
+                            ),
                             None => {
                                 return Err(format!(
                                     "Unknown gossipsub fork digest: {:?}",
@@ -329,7 +342,7 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::DataColumnSidecar(subnet_id) => {
                         match fork_context.get_fork_from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Gloas) => {
+                            Some(Phase::Gloas | Phase::Pq) => {
                                 ensure_max_message_size(
                                     "DataColumnSidecar",
                                     "MAX_DATA_COLUMN_SIDECAR_SIZE",
@@ -433,6 +446,12 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 )
                             }
+                            // TODO(PQ): Decode PQ attester slashings.
+                            Some(Phase::Pq) => {
+                                return Err(
+                                    "PQ attester slashing gossip is not supported yet".to_owned()
+                                );
+                            }
                             None => {
                                 return Err(format!(
                                     "Unknown gossipsub fork digest: {:?}",
@@ -502,6 +521,13 @@ impl<P: Preset> PubsubMessage<P> {
                                 .map(LightClientFinalityUpdate::Gloas)
                                 .map_err(|e| format!("{:?}", e))?
                                 .into(),
+                            // TODO(PQ): Decode PQ light client finality updates.
+                            Some(Phase::Pq) => {
+                                return Err(
+                                    "PQ light client finality update gossip is not supported yet"
+                                        .to_owned(),
+                                );
+                            }
                             None => {
                                 return Err(format!(
                                     "light_client_finality_update topic invalid for given fork digest {:?}",
@@ -544,6 +570,13 @@ impl<P: Preset> PubsubMessage<P> {
                             Some(Phase::Gloas) => SszReadDefault::from_ssz_default(data)
                                 .map(LightClientOptimisticUpdate::Gloas)
                                 .map_err(|e| format!("{:?}", e))?,
+                            // TODO(PQ): Decode PQ light client optimistic updates.
+                            Some(Phase::Pq) => {
+                                return Err(
+                                    "PQ light client optimistic update gossip is not supported yet"
+                                        .to_owned(),
+                                );
+                            }
                             None => {
                                 return Err(format!(
                                     "light_client_optimistic_update topic invalid for given fork digest {:?}",
@@ -572,6 +605,11 @@ impl<P: Preset> PubsubMessage<P> {
                                 );
                                 Ok(PubsubMessage::ExecutionPayloadBid(execution_payload_bid))
                             }
+                            // TODO(PQ): Decode PQ execution payload bids.
+                            Some(Phase::Pq) => {
+                                Err("PQ execution payload bid gossip is not supported yet"
+                                    .to_owned())
+                            }
                             Some(
                                 Phase::Phase0
                                 | Phase::Altair
@@ -595,6 +633,11 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 );
                                 Ok(PubsubMessage::ExecutionPayload(execution_payload_envelope))
+                            }
+                            // TODO(PQ): Decode PQ execution payload envelopes.
+                            Some(Phase::Pq) => {
+                                Err("PQ execution payload envelope gossip is not supported yet"
+                                    .to_owned())
                             }
                             Some(
                                 Phase::Phase0
@@ -622,6 +665,10 @@ impl<P: Preset> PubsubMessage<P> {
                                     payload_attestation,
                                 ))
                             }
+                            // TODO(PQ): Decode PQ payload attestations.
+                            Some(Phase::Pq) => {
+                                Err("PQ payload attestation gossip is not supported yet".to_owned())
+                            }
                             Some(
                                 Phase::Phase0
                                 | Phase::Altair
@@ -646,6 +693,11 @@ impl<P: Preset> PubsubMessage<P> {
                                 Ok(PubsubMessage::ProposerPreferences(Arc::new(
                                     signed_proposer_preferences,
                                 )))
+                            }
+                            // TODO(PQ): Decode PQ proposer preferencess.
+                            Some(Phase::Pq) => {
+                                Err("PQ proposer preferences gossip is not supported yet"
+                                    .to_owned())
                             }
                             Some(
                                 Phase::Phase0
