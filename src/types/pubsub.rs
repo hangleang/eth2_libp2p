@@ -19,7 +19,7 @@ use types::{
     combined::{
         Attestation, AttesterSlashing, DataColumnSidecar, LightClientFinalityUpdate,
         LightClientOptimisticUpdate, ProposerSlashing, SignedAggregateAndProof, SignedBeaconBlock,
-        SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+        SignedExecutionPayloadBid, SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
     deneb::containers::SignedBeaconBlock as DenebBeaconBlock,
     electra::containers::{
@@ -33,7 +33,7 @@ use types::{
     gloas::containers::{
         AttesterSlashing as GloasAttesterSlashing, DataColumnSidecar as GloasDataColumnSidecar,
         PayloadAttestationMessage, SignedAggregateAndProof as GloasSignedAggregateAndProof,
-        SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
+        SignedBeaconBlock as GloasSignedBeaconBlock,
     },
     nonstandard::Phase,
     phase0::{
@@ -609,15 +609,27 @@ impl<P: Preset> PubsubMessage<P> {
                                 )?;
 
                                 let execution_payload_bid = Arc::new(
-                                    SignedExecutionPayloadBid::from_ssz_default(data)
-                                        .map_err(|e| format!("{:?}", e))?,
+                                    SignedExecutionPayloadBid::from_ssz_at_phase(
+                                        Phase::Gloas,
+                                        data,
+                                    )
+                                    .map_err(|e| format!("{:?}", e))?,
                                 );
                                 Ok(PubsubMessage::ExecutionPayloadBid(execution_payload_bid))
                             }
-                            // TODO(PQ): Decode PQ execution payload bids.
                             Some(Phase::Pq) => {
-                                Err("PQ execution payload bid gossip is not supported yet"
-                                    .to_owned())
+                                ensure_max_message_size(
+                                    "SignedExecutionPayloadBid",
+                                    "MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_PQ",
+                                    data,
+                                    P::MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_PQ,
+                                )?;
+
+                                let execution_payload_bid = Arc::new(
+                                    SignedExecutionPayloadBid::from_ssz_at_phase(Phase::Pq, data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                );
+                                Ok(PubsubMessage::ExecutionPayloadBid(execution_payload_bid))
                             }
                             Some(
                                 Phase::Phase0
@@ -833,7 +845,9 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
                 write!(
                     f,
                     "Execution Payload Bid: slot: {}, parent_block_root: {:?}, builder_index: {}",
-                    data.message.slot, data.message.parent_block_root, data.message.builder_index
+                    data.message().slot,
+                    data.message().parent_block_root,
+                    data.message().builder_index
                 )
             }
             PubsubMessage::ExecutionPayload(data) => {
