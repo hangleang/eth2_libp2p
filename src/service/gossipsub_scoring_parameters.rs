@@ -11,7 +11,6 @@ use std::time::Duration;
 use typenum::Unsigned as _;
 use types::{
     config::Config as ChainConfig,
-    nonstandard::Phase,
     phase0::{
         consts::{AttestationSubnetCount, TargetAggregatorsPerCommittee},
         primitives::Slot,
@@ -403,7 +402,7 @@ impl<P: Preset> PeerScoreSettings<P> {
 
 #[cfg(test)]
 mod tests {
-    use types::{phase0::primitives::H32, preset::Minimal};
+    use types::{nonstandard::Phase, phase0::primitives::H32, preset::Minimal};
 
     use super::*;
 
