@@ -18,8 +18,8 @@ use types::{
     capella::containers::{SignedBeaconBlock as CapellaBeaconBlock, SignedBlsToExecutionChange},
     combined::{
         Attestation, AttesterSlashing, DataColumnSidecar, LightClientFinalityUpdate,
-        LightClientOptimisticUpdate, SignedAggregateAndProof, SignedBeaconBlock,
-        SignedExecutionPayloadEnvelope,
+        LightClientOptimisticUpdate, ProposerSlashing, SignedAggregateAndProof, SignedBeaconBlock,
+        SignedExecutionPayloadEnvelope, SignedProposerPreferences,
     },
     deneb::containers::SignedBeaconBlock as DenebBeaconBlock,
     electra::containers::{
@@ -34,13 +34,12 @@ use types::{
         AttesterSlashing as GloasAttesterSlashing, DataColumnSidecar as GloasDataColumnSidecar,
         PayloadAttestationMessage, SignedAggregateAndProof as GloasSignedAggregateAndProof,
         SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
-        SignedProposerPreferences,
     },
     nonstandard::Phase,
     phase0::{
         containers::{
             Attestation as Phase0Attestation, AttesterSlashing as Phase0AttesterSlashing,
-            ProposerSlashing, SignedAggregateAndProof as Phase0SignedAggregateAndProof,
+            SignedAggregateAndProof as Phase0SignedAggregateAndProof,
             SignedBeaconBlock as Phase0SignedBeaconBlock, SignedVoluntaryExit,
         },
         primitives::{ForkDigest, SubnetId},
@@ -395,7 +394,16 @@ impl<P: Preset> PubsubMessage<P> {
                         Ok(PubsubMessage::VoluntaryExit(Box::new(voluntary_exit)))
                     }
                     GossipKind::ProposerSlashing => {
-                        let proposer_slashing = ProposerSlashing::from_ssz_default(data)
+                        let Some(phase) =
+                            fork_context.get_fork_from_context_bytes(gossip_topic.fork_digest)
+                        else {
+                            return Err(format!(
+                                "Unknown gossipsub fork digest: {:?}",
+                                gossip_topic.fork_digest
+                            ));
+                        };
+
+                        let proposer_slashing = ProposerSlashing::from_ssz_at_phase(phase, data)
                             .map_err(|e| format!("{:?}", e))?;
                         Ok(PubsubMessage::ProposerSlashing(Box::new(proposer_slashing)))
                     }
@@ -687,18 +695,13 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::ProposerPreferences => {
                         match fork_context.get_fork_from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Gloas) => {
+                            Some(phase @ (Phase::Gloas | Phase::Pq)) => {
                                 let signed_proposer_preferences =
-                                    SignedProposerPreferences::from_ssz_default(data)
+                                    SignedProposerPreferences::from_ssz_at_phase(phase, data)
                                         .map_err(|e| format!("{:?}", e))?;
                                 Ok(PubsubMessage::ProposerPreferences(Arc::new(
                                     signed_proposer_preferences,
                                 )))
-                            }
-                            // TODO(PQ): Decode PQ proposer preferencess.
-                            Some(Phase::Pq) => {
-                                Err("PQ proposer preferences gossip is not supported yet"
-                                    .to_owned())
                             }
                             Some(
                                 Phase::Phase0
@@ -852,7 +855,8 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
                 write!(
                     f,
                     "Proposer Preference: slot: {}, validator_index: {}",
-                    data.message.proposal_slot, data.message.validator_index,
+                    data.message().proposal_slot,
+                    data.message().validator_index,
                 )
             }
         }
