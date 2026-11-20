@@ -44,7 +44,12 @@ use types::{
         },
         primitives::{ForkDigest, SubnetId},
     },
-    pq::containers::SignedBeaconBlock as PqSignedBeaconBlock,
+    pq::containers::{
+        AttesterSlashing as PqAttesterSlashing,
+        PayloadAttestationMessage as PqPayloadAttestationMessage,
+        SignedAggregateAndProof as PqSignedAggregateAndProof,
+        SignedBeaconBlock as PqSignedBeaconBlock, SingleAttestation as PqSingleAttestation,
+    },
     preset::Preset,
     traits::SignedBeaconBlock as _,
 };
@@ -83,6 +88,8 @@ pub enum PubsubMessage<P: Preset> {
     ExecutionPayload(Arc<SignedExecutionPayloadEnvelope<P>>),
     /// Gossipsub message providing notification of a payload attestation message.
     PayloadAttestationMessage(Arc<PayloadAttestationMessage>),
+    /// Gossipsub message providing notification of a PQ payload attestation message.
+    PqPayloadAttestationMessage(Arc<PqPayloadAttestationMessage>),
     /// Gossipsub message providing notification of a proposer preference.
     ProposerPreferences(Arc<SignedProposerPreferences>),
 }
@@ -183,7 +190,10 @@ impl<P: Preset> PubsubMessage<P> {
             }
             PubsubMessage::ExecutionPayloadBid(_) => GossipKind::ExecutionPayloadBid,
             PubsubMessage::ExecutionPayload(_) => GossipKind::ExecutionPayload,
-            PubsubMessage::PayloadAttestationMessage(_) => GossipKind::PayloadAttestationMessage,
+            PubsubMessage::PayloadAttestationMessage(_)
+            | PubsubMessage::PqPayloadAttestationMessage(_) => {
+                GossipKind::PayloadAttestationMessage
+            }
             PubsubMessage::ProposerPreferences(_) => GossipKind::ProposerPreferences,
         }
     }
@@ -238,9 +248,18 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 )
                             }
-                            // TODO(PQ): Decode PQ aggregates.
                             Some(Phase::Pq) => {
-                                return Err("PQ aggregate gossip is not supported yet".to_owned());
+                                ensure_max_message_size(
+                                    "SignedAggregateAndProof",
+                                    "MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE_PQ",
+                                    data,
+                                    P::MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE_PQ,
+                                )?;
+
+                                SignedAggregateAndProof::Pq(
+                                    PqSignedAggregateAndProof::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                )
                             }
                             None => {
                                 return Err(format!(
@@ -279,9 +298,15 @@ impl<P: Preset> PubsubMessage<P> {
                                     single_attestation,
                                 ))
                             }
-                            // TODO(PQ): Decode PQ attestations.
                             Some(Phase::Pq) => {
-                                return Err("PQ attestation gossip is not supported yet".to_owned());
+                                let single_attestation =
+                                    PqSingleAttestation::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?;
+
+                                Ok(PubsubMessage::Attestation(
+                                    *subnet_id,
+                                    Arc::new(Attestation::PqSingle(single_attestation)),
+                                ))
                             }
                             None => {
                                 return Err(format!(
@@ -455,11 +480,18 @@ impl<P: Preset> PubsubMessage<P> {
                                         .map_err(|e| format!("{:?}", e))?,
                                 )
                             }
-                            // TODO(PQ): Decode PQ attester slashings.
                             Some(Phase::Pq) => {
-                                return Err(
-                                    "PQ attester slashing gossip is not supported yet".to_owned()
-                                );
+                                ensure_max_message_size(
+                                    "AttesterSlashing",
+                                    "MAX_ATTESTER_SLASHING_SIZE_PQ",
+                                    data,
+                                    P::MAX_ATTESTER_SLASHING_SIZE_PQ,
+                                )?;
+
+                                AttesterSlashing::Pq(
+                                    PqAttesterSlashing::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                )
                             }
                             None => {
                                 return Err(format!(
@@ -530,10 +562,10 @@ impl<P: Preset> PubsubMessage<P> {
                                 .map(LightClientFinalityUpdate::Gloas)
                                 .map_err(|e| format!("{:?}", e))?
                                 .into(),
-                            // TODO(PQ): Decode PQ light client finality updates.
+                            // PQ removes the light client protocol.
                             Some(Phase::Pq) => {
                                 return Err(
-                                    "PQ light client finality update gossip is not supported yet"
+                                    "light_client_finality_update topic does not exist in PQ"
                                         .to_owned(),
                                 );
                             }
@@ -579,10 +611,10 @@ impl<P: Preset> PubsubMessage<P> {
                             Some(Phase::Gloas) => SszReadDefault::from_ssz_default(data)
                                 .map(LightClientOptimisticUpdate::Gloas)
                                 .map_err(|e| format!("{:?}", e))?,
-                            // TODO(PQ): Decode PQ light client optimistic updates.
+                            // PQ removes the light client protocol.
                             Some(Phase::Pq) => {
                                 return Err(
-                                    "PQ light client optimistic update gossip is not supported yet"
+                                    "light_client_optimistic_update topic does not exist in PQ"
                                         .to_owned(),
                                 );
                             }
@@ -648,17 +680,20 @@ impl<P: Preset> PubsubMessage<P> {
                     }
                     GossipKind::ExecutionPayload => {
                         match fork_context.get_fork_from_context_bytes(gossip_topic.fork_digest) {
-                            Some(Phase::Gloas) => {
+                            Some(phase @ (Phase::Gloas | Phase::Pq)) => {
                                 let execution_payload_envelope = Arc::new(
                                     SignedExecutionPayloadEnvelope::from_ssz_default(data)
                                         .map_err(|e| format!("{:?}", e))?,
                                 );
+
+                                if execution_payload_envelope.phase() != phase {
+                                    return Err(format!(
+                                        "execution payload envelope of phase {} on a {phase} topic",
+                                        execution_payload_envelope.phase(),
+                                    ));
+                                }
+
                                 Ok(PubsubMessage::ExecutionPayload(execution_payload_envelope))
-                            }
-                            // TODO(PQ): Decode PQ execution payload envelopes.
-                            Some(Phase::Pq) => {
-                                Err("PQ execution payload envelope gossip is not supported yet"
-                                    .to_owned())
                             }
                             Some(
                                 Phase::Phase0
@@ -686,9 +721,14 @@ impl<P: Preset> PubsubMessage<P> {
                                     payload_attestation,
                                 ))
                             }
-                            // TODO(PQ): Decode PQ payload attestations.
                             Some(Phase::Pq) => {
-                                Err("PQ payload attestation gossip is not supported yet".to_owned())
+                                let payload_attestation = Arc::new(
+                                    PqPayloadAttestationMessage::from_ssz_default(data)
+                                        .map_err(|e| format!("{:?}", e))?,
+                                );
+                                Ok(PubsubMessage::PqPayloadAttestationMessage(
+                                    payload_attestation,
+                                ))
                             }
                             Some(
                                 Phase::Phase0
@@ -759,6 +799,7 @@ impl<P: Preset> PubsubMessage<P> {
             PubsubMessage::ExecutionPayloadBid(data) => data.to_ssz(),
             PubsubMessage::ExecutionPayload(data) => data.to_ssz(),
             PubsubMessage::PayloadAttestationMessage(data) => data.to_ssz(),
+            PubsubMessage::PqPayloadAttestationMessage(data) => data.to_ssz(),
             PubsubMessage::ProposerPreferences(data) => data.to_ssz(),
         }
     }
@@ -862,6 +903,13 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
                 write!(
                     f,
                     "Payload Attestation: slot: {}, beacon_block_root: {:?}, validator_index: {}",
+                    data.data.slot, data.data.beacon_block_root, data.validator_index
+                )
+            }
+            PubsubMessage::PqPayloadAttestationMessage(data) => {
+                write!(
+                    f,
+                    "PQ Payload Attestation: slot: {}, beacon_block_root: {:?}, validator_index: {}",
                     data.data.slot, data.data.beacon_block_root, data.validator_index
                 )
             }

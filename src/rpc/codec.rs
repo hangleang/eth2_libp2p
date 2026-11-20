@@ -828,11 +828,23 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::ExecutionPayloadEnvelopesByRangeV1 => match fork_name {
-            Some(Phase::Gloas) => Ok(Some(RpcSuccessResponse::ExecutionPayloadEnvelopesByRange(
-                Arc::new(SignedExecutionPayloadEnvelope::from_ssz_default(
-                    decoded_buffer,
-                )?),
-            ))),
+            Some(phase @ (Phase::Gloas | Phase::Pq)) => {
+                let envelope = SignedExecutionPayloadEnvelope::from_ssz_default(decoded_buffer)?;
+
+                if envelope.phase() != phase {
+                    return Err(RPCError::ErrorResponse(
+                        RpcErrorResponse::InvalidRequest,
+                        format!(
+                            "execution payload envelope of phase {} in a {phase} response",
+                            envelope.phase(),
+                        ),
+                    ));
+                }
+
+                Ok(Some(RpcSuccessResponse::ExecutionPayloadEnvelopesByRange(
+                    Arc::new(envelope),
+                )))
+            }
             Some(
                 Phase::Phase0
                 | Phase::Altair
@@ -845,11 +857,6 @@ fn handle_rpc_response<P: Preset>(
                 RpcErrorResponse::InvalidRequest,
                 "Invalid fork name for execution payload envelopes by range".to_string(),
             )),
-            // TODO(PQ): Decode PQ execution payload envelopes.
-            Some(Phase::Pq) => Err(RPCError::ErrorResponse(
-                RpcErrorResponse::InvalidRequest,
-                "PQ execution payload envelopes are not supported yet".to_string(),
-            )),
             None => Err(RPCError::ErrorResponse(
                 RpcErrorResponse::InvalidRequest,
                 format!(
@@ -859,11 +866,23 @@ fn handle_rpc_response<P: Preset>(
             )),
         },
         SupportedProtocol::ExecutionPayloadEnvelopesByRootV1 => match fork_name {
-            Some(Phase::Gloas) => Ok(Some(RpcSuccessResponse::ExecutionPayloadEnvelopesByRoot(
-                Arc::new(SignedExecutionPayloadEnvelope::from_ssz_default(
-                    decoded_buffer,
-                )?),
-            ))),
+            Some(phase @ (Phase::Gloas | Phase::Pq)) => {
+                let envelope = SignedExecutionPayloadEnvelope::from_ssz_default(decoded_buffer)?;
+
+                if envelope.phase() != phase {
+                    return Err(RPCError::ErrorResponse(
+                        RpcErrorResponse::InvalidRequest,
+                        format!(
+                            "execution payload envelope of phase {} in a {phase} response",
+                            envelope.phase(),
+                        ),
+                    ));
+                }
+
+                Ok(Some(RpcSuccessResponse::ExecutionPayloadEnvelopesByRoot(
+                    Arc::new(envelope),
+                )))
+            }
             Some(
                 Phase::Phase0
                 | Phase::Altair
@@ -875,11 +894,6 @@ fn handle_rpc_response<P: Preset>(
             ) => Err(RPCError::ErrorResponse(
                 RpcErrorResponse::InvalidRequest,
                 "Invalid fork name for execution payload envelopes by root".to_string(),
-            )),
-            // TODO(PQ): Decode PQ execution payload envelopes.
-            Some(Phase::Pq) => Err(RPCError::ErrorResponse(
-                RpcErrorResponse::InvalidRequest,
-                "PQ execution payload envelopes are not supported yet".to_string(),
             )),
             None => Err(RPCError::ErrorResponse(
                 RpcErrorResponse::InvalidRequest,

@@ -1013,7 +1013,7 @@ impl<P: Preset> Network<P> {
             )
             .map_err(Error::msg)?;
 
-        for i in 0..self.score_settings.attestation_subnet_count() {
+        for i in 0..self.score_settings.attestation_subnet_count(current_slot) {
             self.gossipsub_mut()
                 .set_topic_params(
                     get_topic(GossipKind::Attestation(i)),

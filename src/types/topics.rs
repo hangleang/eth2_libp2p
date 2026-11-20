@@ -8,10 +8,7 @@ use types::{
     altair::consts::SyncCommitteeSubnetCount,
     config::Config as ChainConfig,
     nonstandard::Phase,
-    phase0::{
-        consts::AttestationSubnetCount,
-        primitives::{ForkDigest, SubnetId},
-    },
+    phase0::primitives::{ForkDigest, SubnetId},
 };
 
 use crate::Subnet;
@@ -55,18 +52,26 @@ pub fn core_topics_to_subscribe(
     let mut topics = vec![
         GossipKind::BeaconBlock,
         GossipKind::BeaconAggregateAndProof,
-        GossipKind::VoluntaryExit,
         GossipKind::ProposerSlashing,
         GossipKind::AttesterSlashing,
     ];
 
+    // Voluntary exits are execution layer requests in PQ.
+    if current_phase < Phase::Pq {
+        topics.push(GossipKind::VoluntaryExit);
+    }
+
     if opts.subscribe_all_subnets {
-        for i in 0..AttestationSubnetCount::U64 {
+        for i in 0..chain_config
+            .attestation_subnet_count_at(current_phase)
+            .get()
+        {
             topics.push(GossipKind::Attestation(i.into()));
         }
     }
 
-    if current_phase >= Phase::Altair {
+    // PQ removes sync committees and with them the light client protocol.
+    if (Phase::Altair..Phase::Pq).contains(&current_phase) {
         topics.push(GossipKind::SignedContributionAndProof);
 
         if opts.subscribe_all_subnets {
@@ -81,7 +86,8 @@ pub fn core_topics_to_subscribe(
         }
     }
 
-    if current_phase >= Phase::Capella {
+    // `BLSToExecutionChange` is disabled in PQ.
+    if (Phase::Capella..Phase::Pq).contains(&current_phase) {
         topics.push(GossipKind::BlsToExecutionChange);
     }
 
@@ -112,11 +118,12 @@ pub fn core_topics_to_subscribe(
 /// For example: the `Attestation` topic is not subscribed as a core topic if
 /// subscribe_all_subnets = false` but we may subscribe to it outside of a fork
 /// boundary if the node is an aggregator.
-pub fn is_fork_non_core_topic(topic: &GossipTopic, _phase: Phase) -> bool {
+pub fn is_fork_non_core_topic(topic: &GossipTopic, phase: Phase) -> bool {
     match topic.kind() {
         // Node may be aggregator of attestation and sync_committee_message topics for all known
         // forks
-        GossipKind::Attestation(_) | GossipKind::SyncCommitteeMessage(_) => true,
+        GossipKind::Attestation(_) => true,
+        GossipKind::SyncCommitteeMessage(_) => phase < Phase::Pq,
         // All these topics are core-only
         GossipKind::BeaconBlock
         | GossipKind::BeaconAggregateAndProof
@@ -583,8 +590,7 @@ mod tests {
         let s = HashSet::from_iter([1, 2].map(|s| s as SubnetId));
         let mut topic_config = get_topic_config(s.clone());
         topic_config.enable_light_client_server = true;
-        let latest_fork = Phase::last().unwrap_or(Phase::Phase0);
-        let topics = core_topics_to_subscribe(&config, latest_fork, &topic_config);
+        let topics = core_topics_to_subscribe(&config, Phase::Gloas, &topic_config);
 
         let mut expected_topics = vec![
             GossipKind::BeaconBlock,
@@ -612,5 +618,32 @@ mod tests {
                 expected_topic,
             );
         }
+    }
+
+    #[test]
+    fn test_core_topics_to_subscribe_in_pq() {
+        let config = get_chain_config();
+        let mut topic_config = get_topic_config(HashSet::new());
+        topic_config.enable_light_client_server = true;
+        topic_config.subscribe_all_subnets = true;
+        let topics = core_topics_to_subscribe(&config, Phase::Pq, &topic_config);
+
+        for removed_topic in [
+            GossipKind::VoluntaryExit,
+            GossipKind::SignedContributionAndProof,
+            GossipKind::SyncCommitteeMessage(0),
+            GossipKind::LightClientFinalityUpdate,
+            GossipKind::LightClientOptimisticUpdate,
+            GossipKind::BlsToExecutionChange,
+            GossipKind::Attestation(16),
+        ] {
+            assert!(
+                !topics.contains(&removed_topic),
+                "Should not contain {removed_topic:?}",
+            );
+        }
+
+        assert!(topics.contains(&GossipKind::Attestation(15)));
+        assert!(topics.contains(&GossipKind::ProposerPreferences));
     }
 }

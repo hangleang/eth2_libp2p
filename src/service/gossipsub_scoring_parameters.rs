@@ -11,10 +11,12 @@ use std::time::Duration;
 use typenum::Unsigned as _;
 use types::{
     config::Config as ChainConfig,
+    nonstandard::Phase,
     phase0::{
         consts::{AttestationSubnetCount, TargetAggregatorsPerCommittee},
         primitives::Slot,
     },
+    pq::consts::AGGREGATORS_PER_COMMITTEE,
     preset::Preset,
 };
 
@@ -47,41 +49,66 @@ pub struct PeerScoreSettings<P: Preset> {
     slot: Duration,
     epoch: Duration,
 
-    beacon_attestation_subnet_weight: f64,
-    max_positive_score: f64,
-
     decay_interval: Duration,
     decay_to_zero: f64,
 
     mesh_n: usize,
     target_aggregators_per_committee: u64,
     attestation_subnet_count: u64,
+    attestation_subnet_count_pq: u64,
+    pq_fork_slot: Slot,
     phantom: PhantomData<P>,
 }
 
 impl<P: Preset> PeerScoreSettings<P> {
     pub fn new(chain_config: &ChainConfig, mesh_n: usize) -> PeerScoreSettings<P> {
         let slot = chain_config.slot_duration_ms;
-        let beacon_attestation_subnet_weight = 1.0 / AttestationSubnetCount::U64 as f64;
-        let max_positive_score = (MAX_IN_MESH_SCORE + MAX_FIRST_MESSAGE_DELIVERIES_SCORE)
-            * (BEACON_BLOCK_WEIGHT
-                + BEACON_AGGREGATE_PROOF_WEIGHT
-                + beacon_attestation_subnet_weight * AttestationSubnetCount::U64 as f64
-                + VOLUNTARY_EXIT_WEIGHT
-                + PROPOSER_SLASHING_WEIGHT
-                + ATTESTER_SLASHING_WEIGHT);
 
         PeerScoreSettings {
             slot,
             epoch: slot * P::SlotsPerEpoch::U32,
-            beacon_attestation_subnet_weight,
-            max_positive_score,
             decay_interval: max(Duration::from_secs(1), slot),
             decay_to_zero: 0.01,
             mesh_n,
             target_aggregators_per_committee: TargetAggregatorsPerCommittee::U64,
             attestation_subnet_count: AttestationSubnetCount::U64,
+            attestation_subnet_count_pq: chain_config.attestation_subnet_count_pq.get(),
+            pq_fork_slot: misc::compute_start_slot_at_epoch::<P>(chain_config.pq_fork_epoch),
             phantom: PhantomData,
+        }
+    }
+
+    fn is_pq(&self, slot: Slot) -> bool {
+        slot >= self.pq_fork_slot
+    }
+
+    fn beacon_attestation_subnet_weight(&self, slot: Slot) -> f64 {
+        1.0 / self.attestation_subnet_count(slot) as f64
+    }
+
+    fn max_positive_score(&self, slot: Slot) -> f64 {
+        // Voluntary exits are execution layer requests in PQ, so the topic is gone.
+        let voluntary_exit_weight = if self.is_pq(slot) {
+            0.0
+        } else {
+            VOLUNTARY_EXIT_WEIGHT
+        };
+
+        // The attestation subnets share a weight of 1 however many there are.
+        (MAX_IN_MESH_SCORE + MAX_FIRST_MESSAGE_DELIVERIES_SCORE)
+            * (BEACON_BLOCK_WEIGHT
+                + BEACON_AGGREGATE_PROOF_WEIGHT
+                + 1.0
+                + voluntary_exit_weight
+                + PROPOSER_SLASHING_WEIGHT
+                + ATTESTER_SLASHING_WEIGHT)
+    }
+
+    fn committees_per_slot(&self, slot: Slot, active_validators: u64) -> u64 {
+        if self.is_pq(slot) {
+            misc::committee_count_from_active_validator_count_pq::<P>(active_validators)
+        } else {
+            misc::committee_count_from_active_validator_count::<P>(active_validators)
         }
     }
 
@@ -112,7 +139,7 @@ impl<P: Preset> PeerScoreSettings<P> {
         ) - params.behaviour_penalty_threshold;
         params.behaviour_penalty_weight = thresholds.gossip_threshold / target_value.powi(2);
 
-        params.topic_score_cap = self.max_positive_score * 0.5;
+        params.topic_score_cap = self.max_positive_score(current_slot) * 0.5;
         params.ip_colocation_factor_weight = -params.topic_score_cap;
 
         params.topics = HashMap::new();
@@ -124,20 +151,24 @@ impl<P: Preset> PeerScoreSettings<P> {
         };
 
         //first all fixed topics
-        params.topics.insert(
-            get_hash(GossipKind::VoluntaryExit),
-            Self::get_topic_params(
-                self,
-                VOLUNTARY_EXIT_WEIGHT,
-                4.0 / P::SlotsPerEpoch::U64 as f64,
-                self.epoch * 100,
-                None,
-            ),
-        );
+        if !self.is_pq(current_slot) {
+            params.topics.insert(
+                get_hash(GossipKind::VoluntaryExit),
+                Self::get_topic_params(
+                    self,
+                    current_slot,
+                    VOLUNTARY_EXIT_WEIGHT,
+                    4.0 / P::SlotsPerEpoch::U64 as f64,
+                    self.epoch * 100,
+                    None,
+                ),
+            );
+        }
         params.topics.insert(
             get_hash(GossipKind::AttesterSlashing),
             Self::get_topic_params(
                 self,
+                current_slot,
                 ATTESTER_SLASHING_WEIGHT,
                 1.0 / 5.0 / P::SlotsPerEpoch::U64 as f64,
                 self.epoch * 100,
@@ -148,6 +179,7 @@ impl<P: Preset> PeerScoreSettings<P> {
             get_hash(GossipKind::ProposerSlashing),
             Self::get_topic_params(
                 self,
+                current_slot,
                 PROPOSER_SLASHING_WEIGHT,
                 1.0 / 5.0 / P::SlotsPerEpoch::U64 as f64,
                 self.epoch * 100,
@@ -168,7 +200,7 @@ impl<P: Preset> PeerScoreSettings<P> {
             beacon_aggregate_proof_params,
         );
 
-        for i in 0..self.attestation_subnet_count {
+        for i in 0..self.attestation_subnet_count(current_slot) {
             params.topics.insert(
                 get_hash(GossipKind::Attestation(i)),
                 beacon_attestation_subnet_params.clone(),
@@ -183,14 +215,16 @@ impl<P: Preset> PeerScoreSettings<P> {
         active_validators: u64,
         current_slot: Slot,
     ) -> (TopicScoreParams, TopicScoreParams, TopicScoreParams) {
-        let committees_per_slot =
-            misc::committee_count_from_active_validator_count::<P>(active_validators);
-        let aggregators_per_slot = self.expected_aggregator_count_per_slot(active_validators);
+        let committees_per_slot = self.committees_per_slot(current_slot, active_validators);
+        let aggregators_per_slot =
+            self.expected_aggregator_count_per_slot(current_slot, active_validators);
+        let attestation_subnet_count = self.attestation_subnet_count(current_slot);
         let multiple_bursts_per_subnet_per_epoch =
-            committees_per_slot as u64 >= 2 * self.attestation_subnet_count / P::SlotsPerEpoch::U64;
+            committees_per_slot as u64 >= 2 * attestation_subnet_count / P::SlotsPerEpoch::U64;
 
         let beacon_block_params = Self::get_topic_params(
             self,
+            current_slot,
             BEACON_BLOCK_WEIGHT,
             1.0,
             self.epoch * 20,
@@ -199,6 +233,7 @@ impl<P: Preset> PeerScoreSettings<P> {
 
         let beacon_aggregate_proof_params = Self::get_topic_params(
             self,
+            current_slot,
             BEACON_AGGREGATE_PROOF_WEIGHT,
             aggregators_per_slot,
             self.epoch,
@@ -206,9 +241,10 @@ impl<P: Preset> PeerScoreSettings<P> {
         );
         let beacon_attestation_subnet_params = Self::get_topic_params(
             self,
-            self.beacon_attestation_subnet_weight,
+            current_slot,
+            self.beacon_attestation_subnet_weight(current_slot),
             active_validators as f64
-                / self.attestation_subnet_count as f64
+                / attestation_subnet_count as f64
                 / P::SlotsPerEpoch::U64 as f64,
             self.epoch
                 * (if multiple_bursts_per_subnet_per_epoch {
@@ -240,8 +276,12 @@ impl<P: Preset> PeerScoreSettings<P> {
         )
     }
 
-    pub fn attestation_subnet_count(&self) -> u64 {
-        self.attestation_subnet_count
+    pub fn attestation_subnet_count(&self, slot: Slot) -> u64 {
+        if self.is_pq(slot) {
+            self.attestation_subnet_count_pq
+        } else {
+            self.attestation_subnet_count
+        }
     }
 
     fn score_parameter_decay_with_base(
@@ -261,9 +301,13 @@ impl<P: Preset> PeerScoreSettings<P> {
         Self::decay_convergence(decay, rate) * decay
     }
 
-    fn expected_aggregator_count_per_slot(&self, active_validators: u64) -> f64 {
-        let committees_per_slot =
-            misc::committee_count_from_active_validator_count::<P>(active_validators);
+    fn expected_aggregator_count_per_slot(&self, slot: Slot, active_validators: u64) -> f64 {
+        let committees_per_slot = self.committees_per_slot(slot, active_validators);
+
+        // Each committee has an aggregation committee of a fixed size in PQ.
+        if self.is_pq(slot) {
+            return (committees_per_slot * AGGREGATORS_PER_COMMITTEE) as f64;
+        }
 
         let committees = committees_per_slot * P::SlotsPerEpoch::U64;
 
@@ -291,6 +335,7 @@ impl<P: Preset> PeerScoreSettings<P> {
 
     fn get_topic_params(
         &self,
+        current_slot: Slot,
         topic_weight: f64,
         expected_message_rate: f64,
         first_message_decay_time: Duration,
@@ -349,9 +394,56 @@ impl<P: Preset> PeerScoreSettings<P> {
         }
 
         t_params.invalid_message_deliveries_weight =
-            -self.max_positive_score / t_params.topic_weight;
+            -self.max_positive_score(current_slot) / t_params.topic_weight;
         t_params.invalid_message_deliveries_decay = self.score_parameter_decay(self.epoch * 50);
 
         t_params
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use types::{phase0::primitives::H32, preset::Minimal};
+
+    use super::*;
+
+    fn topic_count(chain_config: &ChainConfig) -> (u64, bool, usize) {
+        let settings = PeerScoreSettings::<Minimal>::new(chain_config, 8);
+        let enr_fork_id = EnrForkId {
+            fork_digest: H32::zero(),
+            next_fork_version: H32::zero(),
+            next_fork_epoch: 0,
+        };
+        let params =
+            settings.get_peer_score_params(1024, &peer_gossip_thresholds(), &enr_fork_id, 0);
+        let exit_topic: Topic = GossipTopic::new(
+            GossipKind::VoluntaryExit,
+            GossipEncoding::default(),
+            enr_fork_id.fork_digest,
+        )
+        .into();
+
+        (
+            settings.attestation_subnet_count(0),
+            params.topics.contains_key(&exit_topic.hash()),
+            params.topics.len(),
+        )
+    }
+
+    #[test]
+    fn pq_scores_its_own_attestation_subnets_and_no_exit_topic() {
+        let (subnets, has_exit_topic, topics) =
+            topic_count(&ChainConfig::minimal().start_and_stay_in(Phase::Gloas));
+
+        assert_eq!(subnets, 64);
+        assert!(has_exit_topic);
+        assert_eq!(topics, 64 + 5);
+
+        let (subnets, has_exit_topic, topics) =
+            topic_count(&ChainConfig::minimal().start_and_stay_in(Phase::Pq));
+
+        assert_eq!(subnets, 16);
+        assert!(!has_exit_topic);
+        assert_eq!(topics, 16 + 4);
     }
 }
