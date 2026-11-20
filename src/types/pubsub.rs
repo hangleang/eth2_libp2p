@@ -19,6 +19,7 @@ use types::{
     combined::{
         Attestation, AttesterSlashing, DataColumnSidecar, LightClientFinalityUpdate,
         LightClientOptimisticUpdate, SignedAggregateAndProof, SignedBeaconBlock,
+        SignedExecutionPayloadEnvelope,
     },
     deneb::containers::SignedBeaconBlock as DenebBeaconBlock,
     electra::containers::{
@@ -33,7 +34,7 @@ use types::{
         AttesterSlashing as GloasAttesterSlashing, DataColumnSidecar as GloasDataColumnSidecar,
         PayloadAttestationMessage, SignedAggregateAndProof as GloasSignedAggregateAndProof,
         SignedBeaconBlock as GloasSignedBeaconBlock, SignedExecutionPayloadBid,
-        SignedExecutionPayloadEnvelope, SignedProposerPreferences,
+        SignedProposerPreferences,
     },
     nonstandard::Phase,
     phase0::{
@@ -836,7 +837,8 @@ impl<P: Preset> std::fmt::Display for PubsubMessage<P> {
                 write!(
                     f,
                     "Execution Payload: slot: {}, beacon_block_root: {:?}",
-                    data.message.payload.slot_number, data.message.beacon_block_root
+                    data.slot(),
+                    data.block_root()
                 )
             }
             PubsubMessage::PayloadAttestationMessage(data) => {

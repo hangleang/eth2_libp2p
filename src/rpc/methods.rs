@@ -19,11 +19,11 @@ use types::{
     combined::{
         DataColumnSidecar, LightClientBootstrap, LightClientFinalityUpdate,
         LightClientOptimisticUpdate, LightClientUpdate, SignedBeaconBlock,
+        SignedExecutionPayloadEnvelope,
     },
     config::Config as ChainConfig,
     deneb::containers::BlobSidecar,
     fulu::{containers::DataColumnsByRootIdentifier, primitives::ColumnIndex},
-    gloas::containers::SignedExecutionPayloadEnvelope,
     phase0::primitives::{Epoch, ForkDigest, H256, Slot},
     preset::Preset,
     traits::SignedBeaconBlock as _,
@@ -1068,7 +1068,7 @@ impl<P: Preset> RpcSuccessResponse<P> {
             | RpcSuccessResponse::DataColumnsByRoot(column) => Some(column.slot()),
             RpcSuccessResponse::ExecutionPayloadEnvelopesByRange(envelope)
             | RpcSuccessResponse::ExecutionPayloadEnvelopesByRoot(envelope) => {
-                Some(envelope.message.payload.slot_number)
+                Some(envelope.slot())
             }
             RpcSuccessResponse::LightClientBootstrap(b) => Some(b.slot()),
             RpcSuccessResponse::LightClientOptimisticUpdate(update) => {
@@ -1140,11 +1140,7 @@ impl<P: Preset> std::fmt::Display for RpcSuccessResponse<P> {
             }
             RpcSuccessResponse::ExecutionPayloadEnvelopesByRange(envelope)
             | RpcSuccessResponse::ExecutionPayloadEnvelopesByRoot(envelope) => {
-                write!(
-                    f,
-                    "ExecutionPayloadEnvelope: slot: {}",
-                    envelope.message.payload.slot_number
-                )
+                write!(f, "ExecutionPayloadEnvelope: slot: {}", envelope.slot())
             }
             RpcSuccessResponse::Pong(ping) => write!(f, "Pong: {}", ping.data),
             RpcSuccessResponse::MetaData(metadata) => {

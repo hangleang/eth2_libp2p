@@ -22,7 +22,7 @@ use types::{
     capella::containers::SignedBeaconBlock as CapellaSignedBeaconBlock,
     combined::{
         LightClientBootstrap, LightClientFinalityUpdate, LightClientOptimisticUpdate,
-        LightClientUpdate, SignedBeaconBlock,
+        LightClientUpdate, SignedBeaconBlock, SignedExecutionPayloadEnvelope,
     },
     config::Config as ChainConfig,
     deneb::containers::{BlobSidecar, SignedBeaconBlock as DenebSignedBeaconBlock},
@@ -32,7 +32,6 @@ use types::{
     },
     gloas::containers::{
         DataColumnSidecar as GloasDataColumnSidecar, SignedBeaconBlock as GloasSignedBeaconBlock,
-        SignedExecutionPayloadEnvelope,
     },
     nonstandard::Phase,
     phase0::{containers::SignedBeaconBlock as Phase0SignedBeaconBlock, primitives::ForkDigest},
@@ -2319,6 +2318,9 @@ mod tests {
     fn test_encode_then_decode_request() {
         let config = Arc::new(Config::mainnet().rapid_upgrade());
 
+        // `rapid_upgrade` does not schedule PQ.
+        let phases = || enum_iterator::all::<Phase>().filter(|phase| *phase != Phase::Pq);
+
         let requests: &[RequestType<Mainnet>] = &[
             RequestType::Ping(ping_message()),
             RequestType::Status(status_message_v1()),
@@ -2333,7 +2335,7 @@ mod tests {
             RequestType::MetaData(MetadataRequest::new_v3()),
         ];
         for req in requests.iter() {
-            for fork_name in enum_iterator::all::<Phase>() {
+            for fork_name in phases() {
                 encode_then_decode_request(&config, req.clone(), fork_name);
             }
         }
@@ -2343,7 +2345,7 @@ mod tests {
             RequestType::BlobsByRoot(blbroot_request()),
         ];
         for req in requests.iter() {
-            for fork_name in enum_iterator::all::<Phase>().filter(|phase| *phase > Phase::Capella) {
+            for fork_name in phases().filter(|phase| *phase > Phase::Capella) {
                 encode_then_decode_request(&config, req.clone(), fork_name);
             }
         }
@@ -2356,7 +2358,7 @@ mod tests {
                 RequestType::BlocksByRoot(bbroot_request_v2(&config, phase)),
             ]
         };
-        for fork_name in enum_iterator::all::<Phase>() {
+        for fork_name in phases() {
             let requests: [RequestType<Mainnet>; 2] = fork_dependent_requests(fork_name);
             for req in requests {
                 encode_then_decode_request(&config, req.clone(), fork_name);
@@ -2701,10 +2703,7 @@ mod tests {
     #[test]
     fn test_invalid_snappy_response() {
         let config = Arc::new(Config::mainnet().rapid_upgrade());
-        let fork_context = Arc::new(ForkContext::dummy::<Mainnet>(
-            &config,
-            Phase::last().expect("there should be at least one phase"),
-        ));
+        let fork_context = Arc::new(ForkContext::dummy::<Mainnet>(&config, Phase::Gloas));
         let max_packet_size = config.max_payload_size; // 10 MiB.
 
         let protocol = ProtocolId::new(SupportedProtocol::BlocksByRangeV2, Encoding::SSZSnappy);

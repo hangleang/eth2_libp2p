@@ -5,9 +5,9 @@ use types::{
     combined::{
         DataColumnSidecar, LightClientBootstrap, LightClientFinalityUpdate,
         LightClientOptimisticUpdate, LightClientUpdate, SignedBeaconBlock,
+        SignedExecutionPayloadEnvelope,
     },
     deneb::containers::BlobSidecar,
-    gloas::containers::SignedExecutionPayloadEnvelope,
     preset::Preset,
 };
 
